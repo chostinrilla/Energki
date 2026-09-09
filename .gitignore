@@ -6,3 +6,9 @@ Desktop.ini
 # Editores
 .vscode/
 *.log
+
+# Node / Netlify
+node_modules/
+.netlify/
+.env
+.env.*

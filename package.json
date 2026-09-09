@@ -1,0 +1,15 @@
+{
+  "name": "prp-energki",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Sitio PRP Energki (dashboard, editor, visor) con backend en Netlify Functions sobre Google Sheets/Drive.",
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.38.0"
+  }
+}
