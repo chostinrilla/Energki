@@ -1195,6 +1195,13 @@
                         status: 'draft',
                         configuracion: manualData.configuracion,
                         paginas: manualData.paginas,
+                        // Respaldo temporal mientras se confirma que el backend ya
+                        // entiende "paginas": si el Apps Script desplegado todavía es
+                        // el viejo, este espejo de la página 1 evita que guarde
+                        // canvas:null/paneles:[] y borre el manual sin querer. Quitar
+                        // una vez confirmado el redeploy (ver Etapa 1 del plan).
+                        canvas: manualData.paginas[0] ? manualData.paginas[0].canvas : null,
+                        paneles: manualData.paginas[0] ? manualData.paginas[0].paneles : [],
                         steps: manualData.steps
                     })
                 });
