@@ -1068,28 +1068,15 @@
         }
 
         function applyEditorData(data) {
-            if (!data) return;
-
-            // Compatibilidad: manuales guardados antes de multi-página traen "canvas" y
-            // "paneles" sueltos en la raíz, no un arreglo "paginas". Si no viene
-            // "paginas", se arma uno solo con esos datos — se ve exactamente igual que
-            // antes, ahora representado como "página 1". Por ahora (hasta la Etapa 4)
-            // el reproductor solo usa la primera página; el cambio automático entre
-            // páginas todavía no existe.
-            const paginas = (Array.isArray(data.paginas) && data.paginas.length)
-                ? data.paginas
-                : [{ canvas: data.canvas, paneles: data.paneles }];
-            const pagina0 = paginas[0];
-
-            if (!pagina0 || !Array.isArray(pagina0.paneles) || pagina0.paneles.length === 0) return;
+            if (!data || !Array.isArray(data.paneles) || data.paneles.length === 0) return;
 
             while (steps.length > baseStepsCount) steps.pop();
 
             // El documento original (el que se inclina) no tenía imagen real (portada.png
             // no existe en el proyecto). Si el manual trae una imagen subida, se usa aquí.
             const docBase = document.getElementById('doc');
-            if (docBase && pagina0.canvas && (pagina0.canvas.url || pagina0.canvas.imageData)) {
-                const src = pagina0.canvas.url || pagina0.canvas.imageData;
+            if (docBase && data.canvas && (data.canvas.url || data.canvas.imageData)) {
+                const src = data.canvas.url || data.canvas.imageData;
                 docBase.style.backgroundImage = `url('${src}')`;
                 docBase.style.backgroundSize = 'contain'; // Muestra la imagen completa, sin recortar ni estirar
                 docBase.style.backgroundRepeat = 'no-repeat';
@@ -1101,7 +1088,7 @@
             // Los paneles con id conocido (panel-fabricante, panel-cliente, etc.) reutilizan
             // el DOM/CSS original tal cual, para que se vea idéntico a la demo. Solo los
             // paneles con id nuevo (de un diagrama distinto) usan el escenario genérico.
-            const customPaneles = pagina0.paneles.filter(p => !namedPanels[p.id]);
+            const customPaneles = data.paneles.filter(p => !namedPanels[p.id]);
             const panelEls = {};
             usingDynamicStage = customPaneles.length > 0;
 
@@ -1111,8 +1098,8 @@
                 const dynDoc = stage.querySelector('.dyn-doc');
                 const overlay = document.getElementById('dyn-overlay');
                 const svg = document.getElementById('dyn-overlay-svg');
-                if (pagina0.canvas && (pagina0.canvas.url || pagina0.canvas.imageData)) {
-                    const dynSrc = pagina0.canvas.url || pagina0.canvas.imageData;
+                if (data.canvas && (data.canvas.url || data.canvas.imageData)) {
+                    const dynSrc = data.canvas.url || data.canvas.imageData;
                     image.src = dynSrc;
                     // El stage se queda en su aspect-ratio fijo (1.4:1); ver nota arriba.
                 }
@@ -1202,7 +1189,7 @@
                 // menciona: se muestran igual, como pasos extra al final.
                 const referenced = new Set();
                 data.steps.forEach(s => (s.panelIds || []).forEach(id => referenced.add(id)));
-                const unreferenced = pagina0.paneles.filter(p => !referenced.has(p.id));
+                const unreferenced = data.paneles.filter(p => !referenced.has(p.id));
                 unreferenced.forEach(panel => {
                     steps.push({
                         text: panel.narrativa || panel.titulo || panel.id,
@@ -1211,7 +1198,7 @@
                     });
                 });
             } else {
-                pagina0.paneles.forEach(panel => {
+                data.paneles.forEach(panel => {
                     steps.push({
                         text: panel.narrativa || panel.titulo || panel.id,
                         activate: () => activatePanel(panel.id),

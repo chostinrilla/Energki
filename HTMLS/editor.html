@@ -465,24 +465,15 @@
         }
 
         // Lógica de Estado de la App
-        // "paginas": cada manual puede tener varias páginas, cada una con su propia
-        // imagen (canvas) y sus propios puntos (paneles). activePageIndex indica cuál
-        // se está editando ahorita; activePagina() es el atajo que usa todo el resto
-        // del código en vez de leer manualData.paginas[activePageIndex] cada vez.
         let manualData = {
             configuracion: {
                 instructor: "Mateo",
                 empresa: "Energki Robotics"
             },
-            paginas: [
-                { canvas: null, paneles: [] }
-            ],
+            canvas: null,
+            paneles: [],
             steps: []
         };
-        let activePageIndex = 0;
-        function activePagina() {
-            return manualData.paginas[activePageIndex];
-        }
 
         function generateId() {
             if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -492,10 +483,7 @@
         // Se genera desde ya (aunque el manual no se haya guardado) para poder organizar
         // las imágenes subidas en Drive en su propia carpeta desde el primer momento.
         let currentTrainingId = new URLSearchParams(location.search).get('id') || generateId();
-        // Antes era un solo booleano ("¿la imagen pendiente de subir?"); ahora puede haber
-        // una imagen pendiente POR PÁGINA, así que es el conjunto de índices de página
-        // con una imagen nueva que aún no se sube a Drive.
-        let dirtyPageIndices = new Set();
+        let imageDirty = false;
         let hasUnsavedChanges = false; // true si hay cambios que "Ver Reproductor" no reflejaría (aún no guardados)
         let hasSavedOnce = false; // true en cuanto existe alguna versión guardada en el servidor
         let formIsDirty = false; // true si el formulario de "Crear/Editar Panel" tiene cambios que no se han confirmado con su propio botón Guardar
@@ -531,7 +519,7 @@
                     previewImg.src = event.target.result;
                     previewImg.style.display = 'block';
                     placeholderText.style.display = 'none';
-                    dirtyPageIndices.add(activePageIndex);
+                    imageDirty = true;
                     hasUnsavedChanges = true;
                 }
                 reader.readAsDataURL(file);
@@ -544,7 +532,7 @@
 
         function renderExistingMarkers() {
             canvasContainer.querySelectorAll('.existing-marker').forEach(el => el.remove());
-            activePagina().paneles.forEach(panel => {
+            manualData.paneles.forEach(panel => {
                 const dot = document.createElement('div');
                 dot.className = 'existing-marker' + (panel.id === editingPanelId ? ' selected' : '');
                 dot.dataset.id = panel.id;
@@ -659,14 +647,14 @@
         }
 
         function renderPanelList() {
-            panelCountEl.textContent = `(${activePagina().paneles.length})`;
+            panelCountEl.textContent = `(${manualData.paneles.length})`;
 
-            if (!activePagina().paneles.length) {
+            if (!manualData.paneles.length) {
                 panelListEl.innerHTML = '<div class="panel-list-empty">Aún no hay puntos. Crea el primero arriba.</div>';
                 return;
             }
 
-            panelListEl.innerHTML = activePagina().paneles.map(p => {
+            panelListEl.innerHTML = manualData.paneles.map(p => {
                 const preview = p.narrativa || p.resumen || '(sin narrativa)';
                 const selected = p.id === editingPanelId ? ' selected' : '';
                 const dragging = p.id === draggedPanelId ? ' dragging-row' : '';
@@ -706,11 +694,11 @@
                 if (e.clientY < rect.top || e.clientY > rect.bottom) continue;
                 const hoveredId = row.dataset.id;
                 if (hoveredId && hoveredId !== draggedPanelId) {
-                    const fromIndex = activePagina().paneles.findIndex(p => p.id === draggedPanelId);
-                    const toIndex = activePagina().paneles.findIndex(p => p.id === hoveredId);
+                    const fromIndex = manualData.paneles.findIndex(p => p.id === draggedPanelId);
+                    const toIndex = manualData.paneles.findIndex(p => p.id === hoveredId);
                     if (fromIndex === -1 || toIndex === -1) break;
-                    const [moved] = activePagina().paneles.splice(fromIndex, 1);
-                    activePagina().paneles.splice(toIndex, 0, moved);
+                    const [moved] = manualData.paneles.splice(fromIndex, 1);
+                    manualData.paneles.splice(toIndex, 0, moved);
                     hasUnsavedChanges = true;
                     renderPanelList();
                 }
@@ -738,7 +726,7 @@
         function ensurePanelSteps() {
             if (!Array.isArray(manualData.steps)) manualData.steps = [];
             const existingIds = new Set(manualData.steps.map(s => s.id));
-            activePagina().paneles.forEach(p => {
+            manualData.paneles.forEach(p => {
                 const stepId = `step-${p.id}`;
                 if (!existingIds.has(stepId)) {
                     manualData.steps.push({
@@ -756,8 +744,8 @@
         function syncStepOrderToPaneles() {
             if (!Array.isArray(manualData.steps) || !manualData.steps.length) return;
 
-            const panelStepIds = new Set(activePagina().paneles.map(p => `step-${p.id}`));
-            const inNewOrder = activePagina().paneles
+            const panelStepIds = new Set(manualData.paneles.map(p => `step-${p.id}`));
+            const inNewOrder = manualData.paneles
                 .map(p => manualData.steps.find(s => s.id === `step-${p.id}`))
                 .filter(Boolean);
 
@@ -768,7 +756,7 @@
         }
 
         async function startEditPanel(id) {
-            const panel = activePagina().paneles.find(p => p.id === id);
+            const panel = manualData.paneles.find(p => p.id === id);
             if (!panel) return false;
 
             // Si hay algo sin confirmar en el punto que se está creando/editando
@@ -842,12 +830,12 @@
         }
 
         async function deletePanel(id) {
-            const panel = activePagina().paneles.find(p => p.id === id);
+            const panel = manualData.paneles.find(p => p.id === id);
             if (!panel) return;
             const confirmed = await appConfirm(`¿Eliminar el punto "${panel.titulo || panel.id}"? Esto no se puede deshacer.`, 'Eliminar', 'Cancelar');
             if (!confirmed) return;
 
-            activePagina().paneles = activePagina().paneles.filter(p => p.id !== id);
+            manualData.paneles = manualData.paneles.filter(p => p.id !== id);
             hasUnsavedChanges = true;
             if (editingPanelId === id) cancelEditPanel();
 
@@ -867,22 +855,16 @@
                 if (data.error) throw new Error(data.error);
 
                 manualData.configuracion = data.configuracion || manualData.configuracion;
-                // Compatibilidad: manuales guardados antes de multi-página traen "canvas"
-                // y "paneles" sueltos en la raíz, no un arreglo "paginas". Si no viene
-                // "paginas", se arma uno solo con esos datos — el manual se ve y edita
-                // exactamente igual que antes, ahora ya representado como "página 1".
-                manualData.paginas = (Array.isArray(data.paginas) && data.paginas.length)
-                    ? data.paginas
-                    : [{ canvas: data.canvas || null, paneles: data.paneles || [] }];
-                activePageIndex = 0;
+                manualData.canvas = data.canvas || null;
+                manualData.paneles = data.paneles || [];
                 manualData.steps = data.steps || []; // se preservan tal cual para no perder narraciones ya guardadas
 
                 document.getElementById('training-title').value = data.title || '';
                 document.getElementById('instructor-name').value = manualData.configuracion.instructor || 'Mateo';
                 document.getElementById('course-objective').value = manualData.configuracion.objetivo || '';
 
-                if (activePagina().canvas && activePagina().canvas.url) {
-                    previewImg.src = activePagina().canvas.url;
+                if (manualData.canvas && manualData.canvas.url) {
+                    previewImg.src = manualData.canvas.url;
                     previewImg.style.display = 'block';
                     placeholderText.style.display = 'none';
                 }
@@ -890,7 +872,7 @@
                 renderExistingMarkers();
                 renderPanelList();
                 hasSavedOnce = true;
-                document.getElementById('send-status').textContent = `Editando "${data.title}". Los paneles nuevos se agregan a los ${activePagina().paneles.length} ya guardados.`;
+                document.getElementById('send-status').textContent = `Editando "${data.title}". Los paneles nuevos se agregan a los ${manualData.paneles.length} ya guardados.`;
             } catch (err) {
                 document.getElementById('send-status').textContent = 'No se pudo cargar el manual: ' + err.message;
             }
@@ -912,7 +894,7 @@
             const proceeded = await startEditPanel(id);
             if (!proceeded || needsConfirm) return;
 
-            const panel = activePagina().paneles.find(p => p.id === id);
+            const panel = manualData.paneles.find(p => p.id === id);
             const dotEl = canvasContainer.querySelector(`.existing-marker[data-id="${id}"]`);
             if (!panel || !dotEl) return;
 
@@ -1013,7 +995,7 @@
             if (editingPanelId) {
                 // Se actualiza el mismo objeto (no se reemplaza) para no perder campos
                 // que este formulario no maneja directo, para que no se pisen entre sí.
-                const panel = activePagina().paneles.find(p => p.id === editingPanelId);
+                const panel = manualData.paneles.find(p => p.id === editingPanelId);
                 if (!panel) { cancelEditPanel(); return; }
                 panel.color = pColor;
                 panel.origen = { x: cX, y: cY };
@@ -1032,7 +1014,7 @@
                 return;
             }
 
-            if (activePagina().paneles.some(p => p.id === pId)) {
+            if (manualData.paneles.some(p => p.id === pId)) {
                 await appAlert(`Ya existe un punto con el ID "${pId}". Usa otro id, o edítalo desde la lista "3. Puntos Existentes".`);
                 return;
             }
@@ -1047,7 +1029,7 @@
             if (pResumen) newPanel.resumen = pResumen;
             if (cleanCampos.length) newPanel.campos = cleanCampos;
 
-            activePagina().paneles.push(newPanel);
+            manualData.paneles.push(newPanel);
             hasUnsavedChanges = true;
 
             // Limpiar formulario para el siguiente
@@ -1064,7 +1046,7 @@
             updateCamposButtonLabel();
             updateSaveButtonState();
 
-            document.getElementById('send-status').textContent = `Punto "${newPanel.titulo}" agregado (${activePagina().paneles.length} en total).`;
+            document.getElementById('send-status').textContent = `Punto "${newPanel.titulo}" agregado (${manualData.paneles.length} en total).`;
             renderExistingMarkers();
             renderPanelList();
         }
@@ -1074,12 +1056,8 @@
         const sendStatus = document.getElementById('send-status');
         const btnVerReproductor = document.getElementById('btn-ver-reproductor');
 
-        // Por ahora solo sube la imagen de la página ACTIVA (con una sola página,
-        // que es la única que existe hoy, es exactamente lo mismo que antes). Cuando
-        // se agregue la administración de varias páginas, esto se generaliza para
-        // recorrer todo "dirtyPageIndices", no solo la página activa.
         async function subirImagenSiHaceFalta() {
-            if (!dirtyPageIndices.has(activePageIndex)) return; // ya está subida (o no hay imagen nueva)
+            if (!imageDirty) return; // ya está subida (o no hay imagen nueva)
             const file = imageUpload.files[0];
             if (!file) return;
 
@@ -1098,8 +1076,8 @@
             const data = await res.json();
             if (data.error) throw new Error(data.error);
 
-            activePagina().canvas = { assetId: data.assetId, url: data.url };
-            dirtyPageIndices.delete(activePageIndex);
+            manualData.canvas = { assetId: data.assetId, url: data.url };
+            imageDirty = false;
         }
 
         // Intro (splash de Energki + inclinación del documento) más un paso por panel,
@@ -1117,7 +1095,7 @@
             }
             intro.push({ id: 'intro-2', text: 'Comencemos con este manual de entrenamiento.', panelIds: ['portada-3d'] });
 
-            const panelSteps = activePagina().paneles.map(p => ({
+            const panelSteps = manualData.paneles.map(p => ({
                 id: `step-${p.id}`,
                 text: p.narrativa || p.resumen || p.titulo || p.id,
                 panelIds: [p.id]
@@ -1194,14 +1172,8 @@
                         title: title,
                         status: 'draft',
                         configuracion: manualData.configuracion,
-                        paginas: manualData.paginas,
-                        // Respaldo temporal mientras se confirma que el backend ya
-                        // entiende "paginas": si el Apps Script desplegado todavía es
-                        // el viejo, este espejo de la página 1 evita que guarde
-                        // canvas:null/paneles:[] y borre el manual sin querer. Quitar
-                        // una vez confirmado el redeploy (ver Etapa 1 del plan).
-                        canvas: manualData.paginas[0] ? manualData.paginas[0].canvas : null,
-                        paneles: manualData.paginas[0] ? manualData.paginas[0].paneles : [],
+                        canvas: manualData.canvas,
+                        paneles: manualData.paneles,
                         steps: manualData.steps
                     })
                 });
@@ -1212,8 +1184,7 @@
                 history.replaceState(null, '', `?id=${encodeURIComponent(currentTrainingId)}`);
                 hasSavedOnce = true;
                 hasUnsavedChanges = false;
-                const totalPaneles = manualData.paginas.reduce((sum, pg) => sum + pg.paneles.length, 0);
-                sendStatus.textContent = `Guardado (v${data.version}): ${totalPaneles} panel(es).`;
+                sendStatus.textContent = `Guardado (v${data.version}): ${manualData.paneles.length} panel(es).`;
             } catch (err) {
                 sendStatus.textContent = 'Error al guardar: ' + err.message;
             }
