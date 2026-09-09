@@ -301,6 +301,7 @@
 
         .controls-bar { display: flex; gap: 15px; background: rgba(5, 10, 18, 0.9); padding: 10px 20px; border-radius: 40px; border: 1px solid #00f0ff; box-shadow: 0 0 15px rgba(0, 240, 255, 0.2); }
         .ctrl-btn { background: transparent; color: #00f0ff; border: none; cursor: pointer; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .ctrl-btn[disabled] { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
         .ctrl-btn:hover { background: rgba(0, 240, 255, 0.2); transform: scale(1.1); box-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
         .ctrl-btn:active { transform: scale(0.95); }
         #btn-play { background: rgba(0, 240, 255, 0.1); }
@@ -534,6 +535,12 @@
         const trainingId = new URLSearchParams(location.search).get('id');
         if (trainingId && trainingId !== LEGACY_DEMO_ID) {
             steps.length = 0;
+            // Mientras carga (fetch a la API), "steps" está vacío: si alguien le da
+            // Play antes de que termine (internet lento, Apps Script tardado), truena
+            // con "Cannot read properties of undefined" porque steps[0] no existe
+            // todavía. Se deshabilitan los controles hasta que la carga termine bien
+            // (ver cargarManualPorId, más abajo).
+            [btnPlay, btnPrev, btnNext, btnRestart].forEach(b => b.disabled = true);
         }
 
         // Pasos originales; los que llegan del editor/API se agregan después de este índice.
@@ -547,7 +554,7 @@
             steps.forEach(s => s.deactivate());
 
             for(let i = 0; i <= targetIndex; i++) {
-                if(i >= 0) steps[i].activate();
+                if(i >= 0 && steps[i]) steps[i].activate();
             }
 
             scene.classList.toggle('dynamic-active', usingDynamicStage && targetIndex >= baseStepsCount);
@@ -1226,7 +1233,10 @@
 
                 applyEditorData(data);
                 subtitleBox.innerHTML = '<span class="k-word highlight">Presiona</span> <span class="k-word highlight">Play</span> <span class="k-word highlight">para</span> <span class="k-word highlight">Iniciar</span> <span class="k-word highlight">la</span> <span class="k-word highlight">Capacitación</span>';
+                [btnPlay, btnPrev, btnNext, btnRestart].forEach(b => b.disabled = false);
             } catch (err) {
+                // Si falló la carga no hay pasos que reproducir: los controles se
+                // quedan deshabilitados (si se reactivaran, apretar Play tronaría igual).
                 subtitleBox.innerHTML = 'No se pudo cargar el manual: ' + err.message;
             }
         }
