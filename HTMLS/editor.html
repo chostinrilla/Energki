@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energki Builder - Generador de Manuales</title>
+    <script src="config.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
+
+        body {
+            margin: 0; padding: 0;
+            background-color: #050a12;
+            color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- BARRA LATERAL (FORMULARIO) --- */
+        .sidebar {
+            width: 400px;
+            background: rgba(10, 15, 25, 0.95);
+            border-right: 1px solid #00f0ff;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: 5px 0 15px rgba(0,0,0,0.5);
+        }
+
+        .sidebar h2 { margin: 0; color: #00f0ff; letter-spacing: 1px; border-bottom: 1px solid rgba(0,240,255,0.3); padding-bottom: 10px;}
+        .sidebar h3 { margin: 0 0 10px 0; color: #fff; font-size: 16px; }
+
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 14px; color: #aaa; }
+        
+        input, select, textarea {
+            background: #0a101a;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 8px 12px;
+            font-family: 'Rajdhani', sans-serif;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        textarea { resize: none; }
+        input:focus, textarea:focus { border-color: #00f0ff; outline: none; }
+
+        .btn {
+            background: #00f0ff; color: #000; border: none;
+            padding: 10px; font-size: 16px; font-weight: bold;
+            cursor: pointer; border-radius: 4px; text-transform: uppercase;
+            transition: 0.2s; margin-top: 10px;
+        }
+        .btn:hover { background: #fff; }
+        .btn-secondary { background: transparent; border: 1px solid #00f0ff; color: #00f0ff; }
+        .btn-secondary:hover { background: rgba(0,240,255,0.1); color: #fff; }
+
+        .coord-box { display: flex; gap: 10px; }
+        .coord-box input { width: 100%; }
+
+        /* --- ÁREA DE TRABAJO (CANVAS) --- */
+        .workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-image: radial-gradient(circle at center, #0f172a 0%, #050a12 100%);
+            position: relative;
+            padding: 20px;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 80%;
+            max-width: 800px;
+            aspect-ratio: 1.4 / 1;
+            background: #111;
+            border: 2px dashed rgba(0, 240, 255, 0.3);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: crosshair;
+        }
+        /* Modo edición: ya no se está creando un punto nuevo, se está moviendo uno existente. */
+        .canvas-container.editing-mode { cursor: grab; }
+        .canvas-container.editing-mode:active { cursor: grabbing; }
+        .canvas-container.editing-mode .marker { background: #00f0ff; box-shadow: 0 0 10px #00f0ff; }
+
+        #preview-img {
+            width: 100%; height: 100%;
+            /* Debe coincidir con el reproductor (object-fit: contain), si no, un clic
+               en el editor no cae en el mismo lugar relativo que en el reproductor. */
+            object-fit: contain;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .placeholder-text { color: #556; font-size: 20px; position: absolute; pointer-events: none;}
+
+        /* Marcador de clic */
+        .marker {
+            position: absolute;
+            width: 12px; height: 12px;
+            background: #ff0055;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 0 10px #ff0055;
+        }
+
+        #send-status {
+            font-size: 13px;
+            color: #888;
+            margin: 8px 0 0;
+        }
+
+        .existing-marker {
+            position: absolute;
+            width: 12px; height: 12px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            opacity: 0.85;
+        }
+
+        .btn-row { display: flex; gap: 10px; }
+        .btn-row .btn { flex: 1; margin-top: 0; }
+        .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+        /* --- BOTONES DE ICONO (carpeta /images) ---
+           Un <img> normal adentro del botón: es la forma más simple y confiable de
+           mostrar un ícono (nada de mask-image ni background-image, que podían no
+           renderizar según el navegador). Sin marco cuadrado: sin borde, solo un
+           resplandor circular sutil al pasar el cursor. */
+        .icon-btn {
+            width: 42px; height: 42px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: transparent;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            padding: 0;
+            flex-shrink: 0;
+            transition: background-color 0.2s, transform 0.15s;
+        }
+        .icon-btn img { width: 20px; height: 20px; display: block; pointer-events: none; }
+        .icon-btn:hover { background-color: rgba(0,240,255,0.15); transform: scale(1.08); }
+        .icon-btn.danger:hover { background-color: rgba(255,85,102,0.15); }
+        .icon-btn[disabled] { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+
+        .icon-btn-sm { width: 30px; height: 30px; }
+        .icon-btn-sm img { width: 15px; height: 15px; }
+
+        .color-swatch {
+            width: 26px; height: 26px; border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.3);
+            flex-shrink: 0;
+            display: block;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .color-swatch:hover { transform: scale(1.1); }
+
+        .id-color-row { display: flex; align-items: center; gap: 8px; }
+        .id-color-row input[type="text"] { flex: 1; min-width: 0; }
+
+        /* --- BOTÓN DE ARCHIVO (reemplaza el input nativo del navegador) --- */
+        .visually-hidden {
+            position: absolute; width: 1px; height: 1px;
+            padding: 0; margin: -1px; overflow: hidden;
+                clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+            }
+            .file-input-row { display: flex; align-items: center; gap: 10px; }
+            .file-name {
+            font-size: 13px; color: #888;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        /* --- LISTA DE PUNTOS EXISTENTES --- */
+        .panel-count {
+            font-weight: 400; color: #888; font-size: 14px;
+        }
+        .panel-list {
+            max-height: 260px;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            background: rgba(0,0,0,0.2);
+        }
+        .panel-list-empty {
+            padding: 14px; text-align: center; color: #556; font-size: 13px;
+        }
+        .panel-list-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            cursor: pointer;
+            transition: background 0.15s;
+            /* Refuerzo del preventDefault en el mousedown del arrastre: sin esto,
+               algunos navegadores igual seleccionan el texto de la fila mientras
+               se arrastra, sintiéndose glitcheado aunque el reordenar funcione bien. */
+            user-select: none;
+        }
+        .panel-list-item:last-child { border-bottom: none; }
+        .panel-list-item:hover { background: rgba(0,240,255,0.06); }
+        .panel-list-item.selected { background: rgba(0,240,255,0.14); box-shadow: inset 3px 0 0 #00f0ff; }
+        .panel-list-item.dragging-row { opacity: 0.4; }
+
+        .reorder-handle { cursor: grab; margin-left: auto; }
+        .reorder-handle:active { cursor: grabbing; }
+
+        .panel-dot {
+            width: 12px; height: 12px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.5);
+            flex-shrink: 0;
+        }
+        .panel-item-text { flex: 1; min-width: 0; }
+        .panel-item-title {
+            font-size: 14px; font-weight: 600; color: #fff;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .panel-item-preview {
+            font-size: 12px; color: #888;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .panel-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+        #edit-mode-banner {
+            display: none;
+            font-size: 12px; color: #00f0ff;
+            background: rgba(0,240,255,0.08);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 4px;
+            padding: 6px 10px;
+            margin-bottom: 4px;
+        }
+
+        .existing-marker { cursor: pointer; pointer-events: auto; transition: transform 0.15s; }
+        .existing-marker:hover { transform: translate(-50%, -50%) scale(1.3); }
+        .existing-marker.selected {
+            width: 16px; height: 16px;
+            box-shadow: 0 0 0 3px rgba(0,240,255,0.6), 0 0 12px rgba(0,240,255,0.8);
+        }
+        .existing-marker.dragging {
+            width: 18px; height: 18px;
+            opacity: 1;
+            cursor: grabbing;
+            z-index: 30;
+            transition: none;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.7), 0 0 16px rgba(255,255,255,0.9);
+        }
+
+        /* --- MODAL PROPIO (reemplaza alert()/confirm() del navegador) --- */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 3000;
+        }
+        .modal-overlay[hidden] { display: none; }
+        .modal-box {
+            background: #0a101a;
+            border: 1px solid #00f0ff;
+            border-radius: 8px;
+            padding: 24px 26px;
+            max-width: 420px; width: 90%;
+            box-shadow: 0 0 30px rgba(0,240,255,0.25);
+        }
+        .modal-box p { margin: 0 0 20px 0; font-size: 16px; line-height: 1.5; color: #fff; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        .modal-actions .btn { margin-top: 0; }
+
+        .campos-modal-box { max-width: 540px; max-height: 80vh; overflow-y: auto; }
+        .campo-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .campo-row input[type="text"] { flex: 1; min-width: 0; }
+        .campo-row-empty { color: #556; font-size: 13px; margin: 0 0 12px; }
+
+        .campo-color-clear {
+            background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #ccc;
+            border-radius: 4px; width: 26px; height: 26px; flex-shrink: 0; cursor: pointer;
+            font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .campo-color-clear:hover { border-color: #ff5566; color: #ff5566; }
+    </style>
+</head>
+<body>
+
+    <!-- BARRA LATERAL -->
+    <div class="sidebar">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0,240,255,0.3); padding-bottom: 10px;">
+            <a href="dashboard.html" class="icon-btn" title="Volver al listado de manuales" aria-label="Volver al listado de manuales" onclick="return handleBackClick(event)"><img src="../images/icon-back-cy.png" alt=""></a>
+            <h2 style="border: none; padding: 0;">ENERGKI BUILDER</h2>
+        </div>
+
+        <!-- Configuración Global -->
+        <div>
+            <h3>1. Configuración Base</h3>
+            <div class="form-group">
+                <label>Título del Manual:</label>
+                <input type="text" id="training-title" placeholder="Ej: Diagrama eléctrico línea 2">
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Sube la imagen del Manual:</label>
+                <div class="file-input-row">
+                    <label for="image-upload" class="icon-btn" title="Seleccionar archivo" aria-label="Seleccionar archivo"><img src="../images/icon-upload-cy.png" alt=""></label>
+                    <span id="file-name-display" class="file-name">Ningún archivo seleccionado</span>
+                </div>
+                <input type="file" id="image-upload" accept="image/*" class="visually-hidden">
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Nombre del Instructor:</label>
+                <input type="text" id="instructor-name" placeholder="Ej: Mateo">
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Objetivo del Curso (opcional):</label>
+                <textarea id="course-objective" rows="2" placeholder="Ej: Desarrollar las habilidades necesarias para interpretar de forma segura este diagrama eléctrico."></textarea>
+            </div>
+        </div>
+
+        <hr style="border-color: rgba(255,255,255,0.1);">
+
+        <!-- Creador de Paneles -->
+        <div>
+            <h3 id="panel-form-title">2. Crear Nuevo Panel</h3>
+            <p id="edit-mode-banner">Editando un punto existente. Haz clic en la imagen para moverlo de lugar.</p>
+            <p style="font-size: 12px; color: #888; margin: 0 0 10px 0;">Haz clic en la imagen a la derecha para obtener las coordenadas de origen.</p>
+
+            <div class="coord-box">
+                <div class="form-group">
+                    <label>Origen X (%)</label>
+                    <input type="text" id="coord-x" readonly placeholder="Clic en la imagen">
+                </div>
+                <div class="form-group">
+                    <label>Origen Y (%)</label>
+                    <input type="text" id="coord-y" readonly placeholder="Clic en la imagen">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label>ID identificador del panel</label>
+                <div class="id-color-row">
+                    <input type="text" id="panel-id" placeholder="Sin espacios">
+                    <label for="panel-color" id="color-preview" class="color-swatch" title="Elegir color temático" aria-label="Elegir color temático" style="background:#00f0ff;"></label>
+                    <input type="color" id="panel-color" value="#00f0ff" class="visually-hidden">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Título de la Tarjeta</label>
+                <input type="text" id="panel-titulo" placeholder="Ej: Voltaje de Operación">
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Datos del panel</label>
+                <input type="text" id="panel-resumen" placeholder="Ej: 480 V trifásico">
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Narrativa (Voz del Instructor)</label>
+                <textarea id="panel-voice" rows="3" placeholder="Escribe lo que dirá el instructor al mostrar este panel..."></textarea>
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <button type="button" class="btn btn-secondary" id="btn-open-campos" onclick="openCamposModal()" style="margin-top:0;">+ Agregar tabla de datos</button>
+            </div>
+
+            <div class="btn-row" style="margin-top: 10px;">
+                <button class="icon-btn" id="btn-save-panel" onclick="addPanel()" title="Guardar panel nuevo" aria-label="Guardar panel nuevo" disabled><img src="../images/icon-save-cy.png" alt=""></button>
+                <button class="icon-btn" id="btn-cancel-edit" onclick="cancelEditPanel()" title="Cancelar" aria-label="Cancelar" style="display:none;"><img src="../images/icon-cancel-cy.png" alt=""></button>
+            </div>
+        </div>
+
+        <hr style="border-color: rgba(255,255,255,0.1);">
+
+        <!-- Lista de puntos existentes -->
+        <div>
+            <h3>3. Puntos Existentes <span class="panel-count" id="panel-count">(0)</span></h3>
+            <div class="panel-list" id="panel-list"></div>
+        </div>
+
+        <hr style="border-color: rgba(255,255,255,0.1);">
+
+        <!-- Guardado -->
+        <div>
+            <h3>4. Guardar y Reproducir</h3>
+            <div class="btn-row">
+                <button class="btn btn-secondary" onclick="guardarManual()">Guardar Manual</button>
+                <button class="icon-btn" id="btn-ver-reproductor" onclick="verEnReproductor()" title="Ver reproductor" aria-label="Ver reproductor"><img src="../images/icon-play-cy.png" alt=""></button>
+            </div>
+            <p id="send-status">Agrega paneles y presiona "Guardar Manual".</p>
+        </div>
+    </div>
+
+    <!-- ÁREA DE TRABAJO (CANVAS) -->
+    <div class="workspace">
+        <h2 style="position: absolute; top: 20px; color: rgba(255,255,255,0.5);">Área de Mapeo Visual</h2>
+        
+        <div class="canvas-container" id="canvas-container">
+            <span class="placeholder-text" id="placeholder-text">Sube una imagen para comenzar</span>
+            <img id="preview-img" alt="Vista previa del manual">
+            <div id="marker" class="marker" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Modal propio (reemplaza alert()/confirm() del navegador) -->
+    <div id="modal-overlay" class="modal-overlay" hidden>
+        <div class="modal-box">
+            <p id="modal-message"></p>
+            <div class="modal-actions" id="modal-actions"></div>
+        </div>
+    </div>
+
+    <!-- Modal de tabla de datos del punto (campos) -->
+    <div id="campos-modal-overlay" class="modal-overlay" hidden>
+        <div class="modal-box campos-modal-box">
+            <h3 style="margin: 0 0 4px; color: #00f0ff;">Tabla de datos del punto</h3>
+            <p style="margin: 0 0 16px; font-size: 13px; color: #888;">Filas tipo "Etiqueta: Valor" que se muestran en la tarjeta (ej. Serial Number, o el código de colores de cableado). El color por fila es opcional.</p>
+            <div id="campos-rows"></div>
+            <button type="button" class="btn btn-secondary" onclick="addCampoRow()" style="margin-top: 4px;">+ Agregar fila</button>
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button type="button" class="btn" onclick="closeCamposModal()">Listo</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Modal propio: reemplaza alert()/confirm() del navegador ---
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalMessage = document.getElementById('modal-message');
+        const modalActions = document.getElementById('modal-actions');
+
+        function showModal(message, buttons) {
+            return new Promise(resolve => {
+                modalMessage.textContent = message;
+                modalActions.innerHTML = '';
+                buttons.forEach(btn => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = btn.primary ? 'btn' : 'btn btn-secondary';
+                    b.textContent = btn.label;
+                    b.onclick = () => { modalOverlay.hidden = true; resolve(btn.value); };
+                    modalActions.appendChild(b);
+                });
+                modalOverlay.hidden = false;
+            });
+        }
+
+        function appAlert(message) {
+            return showModal(message, [{ label: 'Entendido', primary: true, value: true }]);
+        }
+
+        function appConfirm(message, confirmLabel, cancelLabel) {
+            return showModal(message, [
+                { label: cancelLabel || 'Cancelar', primary: false, value: false },
+                { label: confirmLabel || 'Continuar', primary: true, value: true }
+            ]);
+        }
+
+        // Lógica de Estado de la App
+        // "paginas": cada manual puede tener varias páginas, cada una con su propia
+        // imagen (canvas) y sus propios puntos (paneles). activePageIndex indica cuál
+        // se está editando ahorita; activePagina() es el atajo que usa todo el resto
+        // del código en vez de leer manualData.paginas[activePageIndex] cada vez.
+        let manualData = {
+            configuracion: {
+                instructor: "Mateo",
+                empresa: "Energki Robotics"
+            },
+            paginas: [
+                { canvas: null, paneles: [] }
+            ],
+            steps: []
+        };
+        let activePageIndex = 0;
+        function activePagina() {
+            return manualData.paginas[activePageIndex];
+        }
+
+        function generateId() {
+            if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+            return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        }
+
+        // Se genera desde ya (aunque el manual no se haya guardado) para poder organizar
+        // las imágenes subidas en Drive en su propia carpeta desde el primer momento.
+        let currentTrainingId = new URLSearchParams(location.search).get('id') || generateId();
+        // Antes era un solo booleano ("¿la imagen pendiente de subir?"); ahora puede haber
+        // una imagen pendiente POR PÁGINA, así que es el conjunto de índices de página
+        // con una imagen nueva que aún no se sube a Drive.
+        let dirtyPageIndices = new Set();
+        let hasUnsavedChanges = false; // true si hay cambios que "Ver Reproductor" no reflejaría (aún no guardados)
+        let hasSavedOnce = false; // true en cuanto existe alguna versión guardada en el servidor
+        let formIsDirty = false; // true si el formulario de "Crear/Editar Panel" tiene cambios que no se han confirmado con su propio botón Guardar
+
+        // Elementos DOM
+        const imageUpload = document.getElementById('image-upload');
+        const previewImg = document.getElementById('preview-img');
+        const placeholderText = document.getElementById('placeholder-text');
+        const canvasContainer = document.getElementById('canvas-container');
+        const marker = document.getElementById('marker');
+
+        const coordXInput = document.getElementById('coord-x');
+        const coordYInput = document.getElementById('coord-y');
+
+        const panelColorInput = document.getElementById('panel-color');
+        const colorPreview = document.getElementById('color-preview');
+        panelColorInput.addEventListener('input', () => { colorPreview.style.background = panelColorInput.value; formIsDirty = true; });
+
+        // Cualquier cambio en el formulario del punto (crear/editar) cuenta como
+        // "pendiente" hasta que se confirme con el botón Guardar de esa sección.
+        ['panel-titulo', 'panel-resumen', 'panel-voice'].forEach(fieldId => {
+            document.getElementById(fieldId).addEventListener('input', () => { formIsDirty = true; });
+        });
+
+        // 1. Manejar subida de imagen
+        const fileNameDisplay = document.getElementById('file-name-display');
+        imageUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                fileNameDisplay.textContent = file.name;
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    previewImg.src = event.target.result;
+                    previewImg.style.display = 'block';
+                    placeholderText.style.display = 'none';
+                    dirtyPageIndices.add(activePageIndex);
+                    hasUnsavedChanges = true;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('training-title').addEventListener('input', () => { hasUnsavedChanges = true; });
+        document.getElementById('instructor-name').addEventListener('input', () => { hasUnsavedChanges = true; });
+        document.getElementById('course-objective').addEventListener('input', () => { hasUnsavedChanges = true; });
+
+        function renderExistingMarkers() {
+            canvasContainer.querySelectorAll('.existing-marker').forEach(el => el.remove());
+            activePagina().paneles.forEach(panel => {
+                const dot = document.createElement('div');
+                dot.className = 'existing-marker' + (panel.id === editingPanelId ? ' selected' : '');
+                dot.dataset.id = panel.id;
+                dot.style.left = panel.origen.x;
+                dot.style.top = panel.origen.y;
+                dot.style.background = panel.color || '#00f0ff';
+                dot.title = `${panel.id}: ${panel.narrativa || ''}`;
+                // mousedown en vez de click: permite tanto seleccionar (clic simple)
+                // como arrastrar (mantener y mover) el mismo punto.
+                dot.addEventListener('mousedown', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    beginDragPanel(panel.id);
+                });
+                dot.addEventListener('click', function(e) { e.stopPropagation(); });
+                canvasContainer.appendChild(dot);
+            });
+        }
+
+        // --- Lista de puntos existentes: ver, buscar, editar, reposicionar, eliminar ---
+        let editingPanelId = null;
+        const panelListEl = document.getElementById('panel-list');
+        const panelCountEl = document.getElementById('panel-count');
+        const editModeBanner = document.getElementById('edit-mode-banner');
+        const panelFormTitle = document.getElementById('panel-form-title');
+        const btnSavePanel = document.getElementById('btn-save-panel');
+        const btnCancelEdit = document.getElementById('btn-cancel-edit');
+        const panelIdInput = document.getElementById('panel-id');
+
+        // El botón de guardar solo se activa cuando hay algo real que guardar
+        // (id del punto + coordenadas), igual que el de cancelar se muestra/oculta.
+        function updateSaveButtonState() {
+            const ready = panelIdInput.value.trim() && coordXInput.value && coordYInput.value;
+            btnSavePanel.disabled = !ready;
+        }
+        panelIdInput.addEventListener('input', () => { formIsDirty = true; updateSaveButtonState(); });
+
+        function escapeHtml(str) {
+            return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // --- Tabla de datos del punto (campos), editada en un modal aparte para no
+        // llenar la barra lateral. "pendingCampos" pertenece al punto que se está
+        // creando/editando en el formulario de arriba; se guarda junto con él. ---
+        let pendingCampos = [];
+        const camposModalOverlay = document.getElementById('campos-modal-overlay');
+        const camposRowsEl = document.getElementById('campos-rows');
+        const btnOpenCampos = document.getElementById('btn-open-campos');
+
+        function updateCamposButtonLabel() {
+            const n = pendingCampos.filter(c => c.label.trim() || c.valor.trim()).length;
+            btnOpenCampos.textContent = n ? `Tabla de datos (${n} fila${n === 1 ? '' : 's'})` : '+ Agregar tabla de datos';
+        }
+
+        function renderCamposRows() {
+            if (!pendingCampos.length) {
+                camposRowsEl.innerHTML = '<p class="campo-row-empty">Aún no hay filas. Agrega la primera abajo.</p>';
+            } else {
+                camposRowsEl.innerHTML = pendingCampos.map((c, i) => `
+                    <div class="campo-row">
+                        <input type="text" placeholder="Etiqueta (ej. Serial Number)" value="${escapeHtml(c.label)}" oninput="updateCampoField(${i}, 'label', this.value)">
+                        <input type="text" placeholder="Valor" value="${escapeHtml(c.valor)}" oninput="updateCampoField(${i}, 'valor', this.value)">
+                        <label class="color-swatch" title="Color de esta fila (opcional, ej. código de colores de cableado)" style="background:${c.color || 'transparent'}; border-style:${c.color ? 'solid' : 'dashed'};">
+                            <input type="color" class="visually-hidden" value="${c.color || '#00f0ff'}" onchange="updateCampoField(${i}, 'color', this.value)">
+                        </label>
+                        ${c.color ? `<button type="button" class="campo-color-clear" title="Quitar color" onclick="clearCampoColor(${i})">&times;</button>` : ''}
+                        <button type="button" class="icon-btn icon-btn-sm danger" title="Quitar fila" onclick="removeCampoRow(${i})"><img src="../images/icon-trash-red.png" alt=""></button>
+                    </div>
+                `).join('');
+            }
+            updateCamposButtonLabel();
+        }
+
+        function addCampoRow() {
+            pendingCampos.push({ label: '', valor: '', color: '' });
+            formIsDirty = true;
+            renderCamposRows();
+        }
+
+        function removeCampoRow(i) {
+            pendingCampos.splice(i, 1);
+            hasUnsavedChanges = true;
+            formIsDirty = true;
+            renderCamposRows();
+        }
+
+        function updateCampoField(i, field, value) {
+            if (!pendingCampos[i]) return;
+            pendingCampos[i][field] = value;
+            hasUnsavedChanges = true;
+            formIsDirty = true;
+            // Solo el color cambia algo visual en la fila (el cuadrito, el botón de
+            // quitar); etiqueta/valor no necesitan volver a dibujar mientras se escribe.
+            if (field === 'color') renderCamposRows();
+        }
+
+        function clearCampoColor(i) {
+            if (!pendingCampos[i]) return;
+            pendingCampos[i].color = '';
+            hasUnsavedChanges = true;
+            formIsDirty = true;
+            renderCamposRows();
+        }
+
+        function openCamposModal() {
+            renderCamposRows();
+            camposModalOverlay.hidden = false;
+        }
+
+        function closeCamposModal() {
+            camposModalOverlay.hidden = true;
+        }
+
+        function renderPanelList() {
+            panelCountEl.textContent = `(${activePagina().paneles.length})`;
+
+            if (!activePagina().paneles.length) {
+                panelListEl.innerHTML = '<div class="panel-list-empty">Aún no hay puntos. Crea el primero arriba.</div>';
+                return;
+            }
+
+            panelListEl.innerHTML = activePagina().paneles.map(p => {
+                const preview = p.narrativa || p.resumen || '(sin narrativa)';
+                const selected = p.id === editingPanelId ? ' selected' : '';
+                const dragging = p.id === draggedPanelId ? ' dragging-row' : '';
+                return `
+                    <div class="panel-list-item${selected}${dragging}" data-id="${escapeHtml(p.id)}" onclick="startEditPanel('${escapeHtml(p.id)}')">
+                        <div class="panel-dot" style="background:${p.color || '#00f0ff'}"></div>
+                        <div class="panel-item-text">
+                            <div class="panel-item-title">${escapeHtml(p.titulo || p.id)}</div>
+                            <div class="panel-item-preview">${escapeHtml(preview)}</div>
+                        </div>
+                        <div class="panel-item-actions">
+                            <button type="button" class="icon-btn icon-btn-sm" title="Editar" aria-label="Editar" onclick="event.stopPropagation(); startEditPanel('${escapeHtml(p.id)}')"><img src="../images/icon-edit-cy.png" alt=""></button>
+                            <button type="button" class="icon-btn icon-btn-sm danger" title="Eliminar" aria-label="Eliminar" onclick="event.stopPropagation(); deletePanel('${escapeHtml(p.id)}')"><img src="../images/icon-trash-red.png" alt=""></button>
+                        </div>
+                        <button type="button" class="icon-btn icon-btn-sm reorder-handle" title="Arrastrar para reordenar" aria-label="Arrastrar para reordenar" onmousedown="event.stopPropagation(); event.preventDefault(); beginReorder('${escapeHtml(p.id)}')" onclick="event.stopPropagation();"><img src="../images/icon-reorder-cy.png" alt=""></button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- Reordenar puntos arrastrando la agarradera de la fila ---
+        let draggedPanelId = null;
+
+        function beginReorder(id) {
+            draggedPanelId = id;
+            renderPanelList();
+            document.addEventListener('mousemove', onReorderMove);
+            document.addEventListener('mouseup', onReorderEnd);
+        }
+
+        function onReorderMove(e) {
+            if (!draggedPanelId) return;
+            e.preventDefault();
+            const rows = panelListEl.querySelectorAll('.panel-list-item');
+            for (const row of rows) {
+                const rect = row.getBoundingClientRect();
+                if (e.clientY < rect.top || e.clientY > rect.bottom) continue;
+                const hoveredId = row.dataset.id;
+                if (hoveredId && hoveredId !== draggedPanelId) {
+                    const fromIndex = activePagina().paneles.findIndex(p => p.id === draggedPanelId);
+                    const toIndex = activePagina().paneles.findIndex(p => p.id === hoveredId);
+                    if (fromIndex === -1 || toIndex === -1) break;
+                    const [moved] = activePagina().paneles.splice(fromIndex, 1);
+                    activePagina().paneles.splice(toIndex, 0, moved);
+                    hasUnsavedChanges = true;
+                    renderPanelList();
+                }
+                break;
+            }
+        }
+
+        function onReorderEnd() {
+            if (!draggedPanelId) return;
+            draggedPanelId = null;
+            document.removeEventListener('mousemove', onReorderMove);
+            document.removeEventListener('mouseup', onReorderEnd);
+            syncStepOrderToPaneles();
+            renderPanelList();
+        }
+
+        // Un punto agregado a un manual YA EXISTENTE no pasa por buildAutoSteps()
+        // (eso solo corre para manuales nuevos, para no pisar narraciones ya
+        // escritas a mano), así que se queda sin su propio "step-<id>". El visor
+        // trata a un punto sin paso como "no mencionado todavía" y SIEMPRE lo
+        // agrega al final, sin importar el orden en la lista — por eso reordenar
+        // un punto recién creado no tenía ningún efecto. Se llama antes de
+        // guardar (ver guardarManual) para que todo punto tenga su paso antes de
+        // sincronizar el orden.
+        function ensurePanelSteps() {
+            if (!Array.isArray(manualData.steps)) manualData.steps = [];
+            const existingIds = new Set(manualData.steps.map(s => s.id));
+            activePagina().paneles.forEach(p => {
+                const stepId = `step-${p.id}`;
+                if (!existingIds.has(stepId)) {
+                    manualData.steps.push({
+                        id: stepId,
+                        text: p.narrativa || p.resumen || p.titulo || p.id,
+                        panelIds: [p.id]
+                    });
+                }
+            });
+        }
+
+        // Si el manual ya tiene un guion guardado (pasos "step-<id>" por panel),
+        // mueve esos pasos para que sigan el nuevo orden de los puntos — si no, el
+        // orden visual cambiaría pero la narración seguiría con el orden viejo.
+        function syncStepOrderToPaneles() {
+            if (!Array.isArray(manualData.steps) || !manualData.steps.length) return;
+
+            const panelStepIds = new Set(activePagina().paneles.map(p => `step-${p.id}`));
+            const inNewOrder = activePagina().paneles
+                .map(p => manualData.steps.find(s => s.id === `step-${p.id}`))
+                .filter(Boolean);
+
+            let cursor = 0;
+            manualData.steps = manualData.steps.map(s => panelStepIds.has(s.id) ? inNewOrder[cursor++] : s);
+            manualData.steps.forEach((s, i) => { s.order = i + 1; });
+            hasUnsavedChanges = true;
+        }
+
+        async function startEditPanel(id) {
+            const panel = activePagina().paneles.find(p => p.id === id);
+            if (!panel) return false;
+
+            // Si hay algo sin confirmar en el punto que se está creando/editando
+            // ahora mismo, avisa antes de cambiar a otro (si no, se pierde en silencio).
+            if (formIsDirty && editingPanelId !== id) {
+                const proceed = await appConfirm(
+                    'Tienes cambios sin guardar en el punto que estabas editando. Si cambias a otro punto ahora, se van a perder.',
+                    'Cambiar de todos modos',
+                    'Cancelar'
+                );
+                if (!proceed) return false;
+            }
+
+            editingPanelId = id;
+            formIsDirty = false;
+
+            panelIdInput.value = panel.id;
+            panelIdInput.readOnly = true; // no cambiar el id de un punto ya existente (rompería sus referencias)
+            document.getElementById('panel-titulo').value = panel.titulo || '';
+            document.getElementById('panel-resumen').value = panel.resumen || '';
+            panelColorInput.value = panel.color || '#00f0ff';
+            colorPreview.style.background = panelColorInput.value;
+            document.getElementById('panel-voice').value = panel.narrativa || '';
+            coordXInput.value = panel.origen.x;
+            coordYInput.value = panel.origen.y;
+            pendingCampos = JSON.parse(JSON.stringify(panel.campos || []));
+            updateCamposButtonLabel();
+
+            marker.style.left = panel.origen.x;
+            marker.style.top = panel.origen.y;
+            marker.style.display = 'block';
+
+            panelFormTitle.textContent = `Editando: ${panel.titulo || panel.id}`;
+            editModeBanner.style.display = 'block';
+            btnSavePanel.title = 'Guardar cambios';
+            btnCancelEdit.style.display = 'inline-flex';
+            canvasContainer.classList.add('editing-mode');
+            updateSaveButtonState();
+
+            renderExistingMarkers();
+            renderPanelList();
+            return true;
+        }
+
+        function cancelEditPanel() {
+            editingPanelId = null;
+            formIsDirty = false;
+            panelIdInput.readOnly = false;
+            canvasContainer.classList.remove('editing-mode');
+
+            document.getElementById('panel-id').value = '';
+            document.getElementById('panel-titulo').value = '';
+            document.getElementById('panel-resumen').value = '';
+            document.getElementById('panel-voice').value = '';
+            panelColorInput.value = '#00f0ff';
+            colorPreview.style.background = panelColorInput.value;
+            coordXInput.value = '';
+            coordYInput.value = '';
+            marker.style.display = 'none';
+            pendingCampos = [];
+            updateCamposButtonLabel();
+
+            panelFormTitle.textContent = '2. Crear Nuevo Panel';
+            editModeBanner.style.display = 'none';
+            btnSavePanel.title = 'Guardar panel nuevo';
+            btnCancelEdit.style.display = 'none';
+            updateSaveButtonState();
+
+            renderExistingMarkers();
+            renderPanelList();
+        }
+
+        async function deletePanel(id) {
+            const panel = activePagina().paneles.find(p => p.id === id);
+            if (!panel) return;
+            const confirmed = await appConfirm(`¿Eliminar el punto "${panel.titulo || panel.id}"? Esto no se puede deshacer.`, 'Eliminar', 'Cancelar');
+            if (!confirmed) return;
+
+            activePagina().paneles = activePagina().paneles.filter(p => p.id !== id);
+            hasUnsavedChanges = true;
+            if (editingPanelId === id) cancelEditPanel();
+
+            renderExistingMarkers();
+            renderPanelList();
+        }
+
+        // Si venimos del dashboard con ?id=..., cargar el manual existente
+        const isEditingExisting = !!new URLSearchParams(location.search).get('id');
+        async function cargarManualExistente() {
+            if (!isEditingExisting) return;
+            if (!API_URL || API_URL === 'PEGA_AQUI_TU_URL_DE_APPS_SCRIPT') return;
+
+            try {
+                const res = await fetch(`${API_URL}?action=getTraining&id=${encodeURIComponent(currentTrainingId)}`);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+
+                manualData.configuracion = data.configuracion || manualData.configuracion;
+                // Compatibilidad: manuales guardados antes de multi-página traen "canvas"
+                // y "paneles" sueltos en la raíz, no un arreglo "paginas". Si no viene
+                // "paginas", se arma uno solo con esos datos — el manual se ve y edita
+                // exactamente igual que antes, ahora ya representado como "página 1".
+                manualData.paginas = (Array.isArray(data.paginas) && data.paginas.length)
+                    ? data.paginas
+                    : [{ canvas: data.canvas || null, paneles: data.paneles || [] }];
+                activePageIndex = 0;
+                manualData.steps = data.steps || []; // se preservan tal cual para no perder narraciones ya guardadas
+
+                document.getElementById('training-title').value = data.title || '';
+                document.getElementById('instructor-name').value = manualData.configuracion.instructor || 'Mateo';
+                document.getElementById('course-objective').value = manualData.configuracion.objetivo || '';
+
+                if (activePagina().canvas && activePagina().canvas.url) {
+                    previewImg.src = activePagina().canvas.url;
+                    previewImg.style.display = 'block';
+                    placeholderText.style.display = 'none';
+                }
+
+                renderExistingMarkers();
+                renderPanelList();
+                hasSavedOnce = true;
+                document.getElementById('send-status').textContent = `Editando "${data.title}". Los paneles nuevos se agregan a los ${activePagina().paneles.length} ya guardados.`;
+            } catch (err) {
+                document.getElementById('send-status').textContent = 'No se pudo cargar el manual: ' + err.message;
+            }
+        }
+        cargarManualExistente();
+        renderPanelList(); // estado inicial (vacío) para un manual nuevo; se sobreescribe si carga uno existente
+        updateSaveButtonState();
+        updateCamposButtonLabel();
+
+        // --- Arrastrar un punto existente para reposicionarlo en vivo ---
+        let dragState = null;
+        let justDraggedPanel = false;
+
+        async function beginDragPanel(id) {
+            // Si hace falta confirmar (había cambios sin guardar en otro punto), el
+            // gesto de "mantener presionado" ya se perdió esperando esa respuesta:
+            // el punto queda seleccionado, pero no se intenta reanudar el arrastre.
+            const needsConfirm = formIsDirty && editingPanelId !== id;
+            const proceeded = await startEditPanel(id);
+            if (!proceeded || needsConfirm) return;
+
+            const panel = activePagina().paneles.find(p => p.id === id);
+            const dotEl = canvasContainer.querySelector(`.existing-marker[data-id="${id}"]`);
+            if (!panel || !dotEl) return;
+
+            dragState = { panel, dotEl };
+            dotEl.classList.add('dragging');
+            marker.style.display = 'none'; // durante el arrastre solo se mueve el punto real, sin marcador duplicado
+
+            document.addEventListener('mousemove', onDragMove);
+            document.addEventListener('mouseup', onDragEnd);
+        }
+
+        function onDragMove(e) {
+            if (!dragState) return;
+            const rect = canvasContainer.getBoundingClientRect();
+            let xPercent = ((e.clientX - rect.left) / rect.width) * 100;
+            let yPercent = ((e.clientY - rect.top) / rect.height) * 100;
+            xPercent = Math.max(0, Math.min(100, xPercent));
+            yPercent = Math.max(0, Math.min(100, yPercent));
+
+            const xStr = `${xPercent.toFixed(1)}%`;
+            const yStr = `${yPercent.toFixed(1)}%`;
+
+            // Mueve el punto real en vivo (no un marcador aparte), y ya deja
+            // guardada la posición en el propio panel para que se vea limpio.
+            dragState.dotEl.style.left = xStr;
+            dragState.dotEl.style.top = yStr;
+            dragState.panel.origen = { x: xStr, y: yStr };
+
+            coordXInput.value = xStr;
+            coordYInput.value = yStr;
+        }
+
+        function onDragEnd() {
+            if (!dragState) return;
+            dragState = null;
+            hasUnsavedChanges = true;
+            document.removeEventListener('mousemove', onDragMove);
+            document.removeEventListener('mouseup', onDragEnd);
+
+            // Evita que el "mouseup" también dispare el clic de "crear punto nuevo" del canvas.
+            justDraggedPanel = true;
+            setTimeout(() => { justDraggedPanel = false; }, 0);
+
+            renderExistingMarkers();
+        }
+
+        // 2. Mapeo Visual: Clic en la imagen para obtener coordenadas
+        canvasContainer.addEventListener('click', function(e) {
+            if (justDraggedPanel) return; // el clic viene de soltar un arrastre, no de crear un punto
+            if (previewImg.style.display === 'none') return; // No hacer nada si no hay imagen
+
+            // Calcular posición relativa al canvas
+            const rect = canvasContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+
+            // Calcular porcentajes exactos
+            const xPercent = ((x / rect.width) * 100).toFixed(1);
+            const yPercent = ((y / rect.height) * 100).toFixed(1);
+
+            // Mover marcador visual
+            marker.style.left = `${xPercent}%`;
+            marker.style.top = `${yPercent}%`;
+            marker.style.display = 'block';
+
+            // Llenar inputs del formulario
+            coordXInput.value = `${xPercent}%`;
+            coordYInput.value = `${yPercent}%`;
+
+            // Aparece "Cancelar" también al marcar un punto nuevo (no solo al editar uno
+            // existente), por si fue un clic por error y no se quiere dejar nada a medias.
+            btnCancelEdit.style.display = 'inline-flex';
+            formIsDirty = true;
+            updateSaveButtonState();
+        });
+
+        // 3. Guardar el Panel en Memoria (crea uno nuevo, o actualiza el que se esté editando)
+        async function addPanel() {
+            const pId = document.getElementById('panel-id').value.trim();
+            const pTitulo = document.getElementById('panel-titulo').value.trim();
+            const pResumen = document.getElementById('panel-resumen').value.trim();
+            const pColor = document.getElementById('panel-color').value;
+            const pVoice = document.getElementById('panel-voice').value;
+            const cX = coordXInput.value;
+            const cY = coordYInput.value;
+
+            if (!pId || !cX || !cY) {
+                await appAlert("Por favor, haz clic en la imagen para obtener coordenadas y dale un ID al panel.");
+                return;
+            }
+
+            const cleanCampos = pendingCampos
+                .map(c => ({ label: c.label.trim(), valor: c.valor.trim(), color: c.color || '' }))
+                .filter(c => c.label || c.valor)
+                .map(c => c.color ? c : { label: c.label, valor: c.valor });
+
+            if (editingPanelId) {
+                // Se actualiza el mismo objeto (no se reemplaza) para no perder campos
+                // que este formulario no maneja directo, para que no se pisen entre sí.
+                const panel = activePagina().paneles.find(p => p.id === editingPanelId);
+                if (!panel) { cancelEditPanel(); return; }
+                panel.color = pColor;
+                panel.origen = { x: cX, y: cY };
+                panel.titulo = pTitulo || pId;
+                panel.narrativa = pVoice;
+                if (pResumen) panel.resumen = pResumen;
+                else delete panel.resumen;
+                if (cleanCampos.length) panel.campos = cleanCampos;
+                else delete panel.campos;
+
+                hasUnsavedChanges = true;
+                document.getElementById('send-status').textContent = `Punto "${panel.titulo}" actualizado.`;
+                cancelEditPanel();
+                renderExistingMarkers();
+                renderPanelList();
+                return;
+            }
+
+            if (activePagina().paneles.some(p => p.id === pId)) {
+                await appAlert(`Ya existe un punto con el ID "${pId}". Usa otro id, o edítalo desde la lista "3. Puntos Existentes".`);
+                return;
+            }
+
+            const newPanel = {
+                id: pId,
+                color: pColor,
+                origen: { x: cX, y: cY },
+                titulo: pTitulo || pId,
+                narrativa: pVoice
+            };
+            if (pResumen) newPanel.resumen = pResumen;
+            if (cleanCampos.length) newPanel.campos = cleanCampos;
+
+            activePagina().paneles.push(newPanel);
+            hasUnsavedChanges = true;
+
+            // Limpiar formulario para el siguiente
+            document.getElementById('panel-id').value = '';
+            document.getElementById('panel-titulo').value = '';
+            document.getElementById('panel-resumen').value = '';
+            document.getElementById('panel-voice').value = '';
+            marker.style.display = 'none';
+            coordXInput.value = '';
+            coordYInput.value = '';
+            btnCancelEdit.style.display = 'none';
+            pendingCampos = [];
+            formIsDirty = false;
+            updateCamposButtonLabel();
+            updateSaveButtonState();
+
+            document.getElementById('send-status').textContent = `Punto "${newPanel.titulo}" agregado (${activePagina().paneles.length} en total).`;
+            renderExistingMarkers();
+            renderPanelList();
+        }
+
+        // 4. Guardar el manual (Sheets vía Apps Script) y abrir el reproductor por id
+        const VIEWER_URL = 'viewer.html';
+        const sendStatus = document.getElementById('send-status');
+        const btnVerReproductor = document.getElementById('btn-ver-reproductor');
+
+        // Por ahora solo sube la imagen de la página ACTIVA (con una sola página,
+        // que es la única que existe hoy, es exactamente lo mismo que antes). Cuando
+        // se agregue la administración de varias páginas, esto se generaliza para
+        // recorrer todo "dirtyPageIndices", no solo la página activa.
+        async function subirImagenSiHaceFalta() {
+            if (!dirtyPageIndices.has(activePageIndex)) return; // ya está subida (o no hay imagen nueva)
+            const file = imageUpload.files[0];
+            if (!file) return;
+
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'uploadAsset',
+                    trainingId: currentTrainingId,
+                    title: document.getElementById('training-title').value.trim(),
+                    base64: previewImg.src,
+                    mimeType: file.type,
+                    fileName: file.name
+                })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            activePagina().canvas = { assetId: data.assetId, url: data.url };
+            dirtyPageIndices.delete(activePageIndex);
+        }
+
+        // Intro (splash de Energki + inclinación del documento) más un paso por panel,
+        // igual a como está armado el ejemplo. Solo se usa en manuales nuevos: si ya
+        // traían un guion propio (cargado al editar), ese se respeta tal cual.
+        function buildAutoSteps() {
+            const instructor = manualData.configuracion.instructor || 'Mateo';
+            const objetivo = (manualData.configuracion.objetivo || '').trim();
+
+            const intro = [
+                { id: 'intro-1', text: `Hola, les doy la bienvenida. Soy ${instructor}, su instructor virtual en Energki Robotics.`, panelIds: ['intro-splash'] }
+            ];
+            if (objetivo) {
+                intro.push({ id: 'intro-objetivo', text: objetivo, panelIds: ['intro-splash'] });
+            }
+            intro.push({ id: 'intro-2', text: 'Comencemos con este manual de entrenamiento.', panelIds: ['portada-3d'] });
+
+            const panelSteps = activePagina().paneles.map(p => ({
+                id: `step-${p.id}`,
+                text: p.narrativa || p.resumen || p.titulo || p.id,
+                panelIds: [p.id]
+            }));
+
+            return intro.concat(panelSteps).map((step, i) => ({ ...step, order: i + 1 }));
+        }
+
+        // Para un manual ya existente no se reconstruye todo el guion (se respetan
+        // las narraciones ya escritas a mano), pero el objetivo sí necesita insertarse
+        // o actualizarse si cambió — si no, se queda guardado pero nunca se narra.
+        function ensureObjectiveStep() {
+            const objetivo = (manualData.configuracion.objetivo || '').trim();
+            const existing = manualData.steps.find(s => s.id === 'intro-objetivo');
+
+            if (!objetivo) {
+                if (existing) manualData.steps = manualData.steps.filter(s => s.id !== 'intro-objetivo');
+                return;
+            }
+
+            if (existing) {
+                existing.text = objetivo;
+                return;
+            }
+
+            // Se inserta justo después del primer paso (la bienvenida), antes de la portada.
+            const insertAt = manualData.steps.length ? 1 : 0;
+            manualData.steps.splice(insertAt, 0, { id: 'intro-objetivo', text: objetivo, panelIds: ['intro-splash'] });
+            manualData.steps.forEach((s, i) => { s.order = i + 1; });
+        }
+
+        async function guardarManual() {
+            if (formIsDirty) {
+                const proceed = await appConfirm(
+                    'Tienes un punto a medias que no confirmaste con su botón "Guardar". Si guardas el manual ahora, ese punto no se incluirá.',
+                    'Guardar de todos modos',
+                    'Cancelar'
+                );
+                if (!proceed) return;
+            }
+
+            if (!API_URL || API_URL === 'PEGA_AQUI_TU_URL_DE_APPS_SCRIPT') {
+                await appAlert('Falta configurar API_URL en config.js con la URL del backend de Apps Script.');
+                return;
+            }
+
+            const title = document.getElementById('training-title').value.trim();
+            if (!title) {
+                await appAlert('Ponle un título al manual antes de guardar.');
+                return;
+            }
+
+            manualData.configuracion.instructor = document.getElementById('instructor-name').value;
+            manualData.configuracion.objetivo = document.getElementById('course-objective').value.trim();
+
+            if (!isEditingExisting) {
+                manualData.steps = buildAutoSteps();
+            } else {
+                ensurePanelSteps();
+                syncStepOrderToPaneles();
+                ensureObjectiveStep();
+            }
+
+            sendStatus.textContent = 'Guardando...';
+            try {
+                await subirImagenSiHaceFalta();
+
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'saveTraining',
+                        id: currentTrainingId,
+                        title: title,
+                        status: 'draft',
+                        configuracion: manualData.configuracion,
+                        paginas: manualData.paginas,
+                        steps: manualData.steps
+                    })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+
+                currentTrainingId = data.id;
+                history.replaceState(null, '', `?id=${encodeURIComponent(currentTrainingId)}`);
+                hasSavedOnce = true;
+                hasUnsavedChanges = false;
+                const totalPaneles = manualData.paginas.reduce((sum, pg) => sum + pg.paneles.length, 0);
+                sendStatus.textContent = `Guardado (v${data.version}): ${totalPaneles} panel(es).`;
+            } catch (err) {
+                sendStatus.textContent = 'Error al guardar: ' + err.message;
+            }
+        }
+
+        async function verEnReproductor() {
+            if (!hasSavedOnce) {
+                await appAlert('Todavía no has guardado este manual. Presiona "Guardar Manual" primero para poder verlo en el reproductor.');
+                return;
+            }
+
+            // Un punto que se dejó a medias en el formulario (sin confirmar con su
+            // propio botón "Guardar") también cuenta como cambio sin guardar.
+            if (hasUnsavedChanges || formIsDirty) {
+                const message = formIsDirty
+                    ? 'Tienes un punto a medias que aún no confirmaste con el botón "Guardar". Si continúas, se perderá y el reproductor mostrará la última versión guardada.'
+                    : 'Tienes cambios sin guardar. Si continúas, el reproductor va a mostrar la última versión guardada, sin estos cambios.';
+                const proceed = await appConfirm(message, 'Ver de todos modos', 'Cancelar');
+                if (!proceed) return;
+            }
+
+            window.open(`${VIEWER_URL}?id=${encodeURIComponent(currentTrainingId)}`, '_blank');
+        }
+
+        // "Volver": si hay algo sin guardar (manual o un punto a medias), confirma antes de salir.
+        function handleBackClick(e) {
+            if (!formIsDirty && !hasUnsavedChanges) return true;
+            e.preventDefault();
+            (async () => {
+                const proceed = await appConfirm(
+                    'Tienes cambios sin guardar. Si sales ahora, se van a perder.',
+                    'Salir de todos modos',
+                    'Cancelar'
+                );
+                if (proceed) location.href = 'dashboard.html';
+            })();
+            return false;
+        }
+
+        // Cerrar la pestaña, recargar (F5) o navegar fuera del sitio no pasa por
+        // ningún botón nuestro, así que ninguno de los avisos de arriba lo detecta.
+        // Este es el único aviso que el navegador no deja reemplazar por un modal
+        // propio (por seguridad, ningún sitio puede personalizar este cuadro).
+        window.addEventListener('beforeunload', (e) => {
+            if (!hasUnsavedChanges && !formIsDirty) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+    </script>
+</body>
+</html>

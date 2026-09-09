@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capacitación Clevertech - Energki Robotics</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
+
+        /* --- FONDO INSTITUCIONAL (TECH GRID + GLOW) --- */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050a12; 
+            background-image: 
+                radial-gradient(circle at 50% -20%, rgba(0, 170, 255, 0.15) 0%, transparent 50%),
+                linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            perspective: 1200px;
+        }
+
+        /* --- MARCA DE AGUA PERMANENTE --- */
+        .watermark {
+            position: absolute;
+            top: 25px;
+            left: 35px;
+            z-index: 5;
+            pointer-events: none;
+        }
+        
+        .logo-watermark {
+            height: 50px;
+            opacity: 0.6;
+            border-radius: 4px;
+            filter: drop-shadow(0 0 5px rgba(0, 240, 255, 0.3));
+        }
+
+        .scene {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            height: 75vh;
+            transform-style: preserve-3d;
+            transition: transform 2.5s cubic-bezier(0.25, 1, 0.5, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: -5vh; 
+        }
+
+        /* --- PANTALLA DE BIENVENIDA (SPLASH SCREEN GLASSMORPHISM) --- */
+        #intro-splash {
+            position: absolute;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 15, 25, 0.6);
+            backdrop-filter: blur(15px); 
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            border-radius: 20px;
+            padding: 50px 80px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.8), inset 0 0 40px rgba(0, 240, 255, 0.1);
+            opacity: 0;
+            transform: scale(0.85);
+            transition: all 1s cubic-bezier(0.25, 1, 0.5, 1);
+            pointer-events: none;
+        }
+
+        #intro-splash.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .logo-splash {
+            max-width: 450px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #intro-splash p { margin: 0; font-size: 20px; color: #aaa; letter-spacing: 2px; text-transform: uppercase;}
+
+        .svg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+        .dashed-line { stroke-dasharray: 8 8; stroke-dashoffset: 500; transition: stroke-dashoffset 1s ease-out, opacity 0.3s; opacity: 0; }
+        .dashed-line.active { stroke-dashoffset: 0; opacity: 1; }
+
+        .document-base {
+            position: absolute;
+            width: 85%;
+            aspect-ratio: 1.4 / 1;
+            background-color: #fff;
+            background-image: url('portada.png'); 
+            background-size: cover;
+            background-position: center;
+            border-radius: 4px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            transition: all 2s cubic-bezier(0.25, 1, 0.5, 1);
+            transform: rotateX(0deg) rotateZ(0deg) translateZ(0px);
+            z-index: 10; 
+        }
+
+        .scene.splash-active .document-base { filter: brightness(0.2) blur(5px); }
+
+        .scene.is-3d .document-base {
+            transform: rotateX(55deg) rotateZ(-20deg) translateZ(-80px);
+            box-shadow: -30px 40px 50px rgba(0,0,0,0.9);
+            filter: brightness(0.85) blur(0px); 
+        }
+
+        /* --- CLASE BASE PANELES --- */
+        .pop-panel {
+            position: absolute;
+            background: rgba(5, 10, 18, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid #00f0ff;
+            border-radius: 8px;
+            padding: 15px 25px;
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.2);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 50; 
+        }
+
+        .pop-panel h3 { margin: 0 0 8px 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1.5px;}
+        .pop-panel p { margin: 0; font-size: 20px; font-weight: bold; color: #fff;}
+
+        .data-grid { display: grid; grid-template-columns: 1fr auto; gap: 4px; font-size: 14px; color: #d0d0d0; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 5px; }
+        .data-grid div { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05);}
+        .data-grid div:nth-child(even) { text-align: right; font-weight: bold; color: #fff;}
+
+        /* --- PANELES (Animaciones) --- */
+        #panel-fabricante { border-color: #ffaa00; box-shadow: 0 0 25px rgba(255, 170, 0, 0.3); }
+        #panel-fabricante h3 { color: #ffaa00; }
+        #panel-fabricante.active { animation: animFab 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes animFab { 0% { top: 42%; left: 18%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 42%; left: 18%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 25%; left: 8%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(150px); } }
+
+        #panel-cliente { border-color: #00ff88; box-shadow: 0 0 25px rgba(0, 255, 136, 0.3); }
+        #panel-cliente h3 { color: #00ff88; }
+        #panel-cliente.active { animation: animCli 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes animCli { 0% { top: 48%; left: 32%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 48%; left: 32%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 15%; left: 28%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(100px); } }
+        
+        #panel-proyecto { border-color: #b000ff; box-shadow: 0 0 25px rgba(176, 0, 255, 0.3); width: 260px;}
+        #panel-proyecto h3 { color: #b000ff; }
+        #panel-proyecto p { font-size: 16px; }
+        #panel-proyecto.active { animation: animProy 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes animProy { 0% { top: 58%; left: 38%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 58%; left: 38%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 10%; left: 55%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(120px); } }
+
+        #panel-identificacion { border-color: #00aaff; box-shadow: 0 0 25px rgba(0, 170, 255, 0.3); width: 300px; padding: 10px 20px;}
+        #panel-identificacion h3 { color: #00aaff; margin-bottom: 5px;}
+        #panel-identificacion.active { animation: animIden 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes animIden { 0% { top: 40%; left: 62%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 40%; left: 62%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 25%; left: 85%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(150px); } }
+
+        #panel-tecnico { border-color: #ff0055; box-shadow: 0 0 25px rgba(255, 0, 85, 0.3); width: 350px; padding: 10px 20px; }
+        #panel-tecnico h3 { color: #ff0055; margin-bottom: 5px;}
+        #panel-tecnico.active { animation: animTec 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes animTec { 0% { top: 68%; left: 28%; opacity: 0; transform: translate(-50%, -50%) scale(0.1) translateZ(0px); } 40% { top: 68%; left: 28%; opacity: 1; transform: translate(-50%, -50%) scale(1.1) translateZ(100px); } 100% { top: 55%; left: 8%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(300px); } }
+
+        #panel-colores { border-color: #ccff00; box-shadow: 0 0 25px rgba(204, 255, 0, 0.3); width: 380px; padding: 10px 20px; }
+        #panel-colores h3 { color: #ccff00; margin-bottom: 10px;}
+        .color-row { display: flex; align-items: center; margin-bottom: 4px; font-size: 14px; color: #fff;}
+        .color-box { width: 14px; height: 14px; border-radius: 3px; margin-right: 10px; border: 1px solid rgba(255,255,255,0.3); flex-shrink: 0;}
+        .cb-black { background: #000; }
+        .cb-green { background: linear-gradient(135deg, #00ff00 50%, #ffff00 50%); }
+        .cb-orange { background: #ff8800; }
+        .cb-red { background: #ff0000; }
+        .cb-white { background: #fff; border: 1px solid #666;}
+        .cb-blue { background: #0000aa; }
+        .cb-whiteblue { background: linear-gradient(135deg, #fff 50%, #0000aa 50%); border: 1px solid #666;}
+        #panel-colores.active { animation: animColores 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes animColores { 0% { top: 70%; left: 75%; opacity: 0; transform: translate(-50%, -50%) scale(0.1) translateZ(0px); } 40% { top: 70%; left: 75%; opacity: 1; transform: translate(-50%, -50%) scale(1.1) translateZ(100px); } 100% { top: 60%; left: 82%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(300px); } }
+
+        /* --- UI Y EFECTO KARAOKE --- */
+        .ui-container { position: absolute; bottom: 15px; width: 100%; display: flex; flex-direction: column; align-items: center; z-index: 100; }
+        
+        #subtitle-box { 
+            background: rgba(5, 10, 18, 0.9); padding: 15px 40px; border-radius: 30px; 
+            font-size: 20px; text-align: center; max-width: 85%; min-height: 28px; 
+            margin-bottom: 12px; border: 1px solid rgba(0,240,255,0.2); 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.8); font-weight: bold;
+            color: #556; 
+        }
+        
+        .k-word { transition: color 0.1s; }
+        .k-word.highlight { color: #00f0ff; text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); } 
+
+        .controls-bar { display: flex; gap: 15px; background: rgba(5, 10, 18, 0.9); padding: 10px 20px; border-radius: 40px; border: 1px solid #00f0ff; box-shadow: 0 0 15px rgba(0, 240, 255, 0.2); }
+        .ctrl-btn { background: transparent; color: #00f0ff; border: none; font-size: 24px; cursor: pointer; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .ctrl-btn:hover { background: rgba(0, 240, 255, 0.2); transform: scale(1.1); box-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
+        .ctrl-btn:active { transform: scale(0.95); }
+        #btn-play { background: rgba(0, 240, 255, 0.1); }
+        #btn-restart { margin-right: 10px; border-right: 1px solid rgba(0,240,255,0.3); border-radius: 50% 0 0 50%; padding-right: 15px; font-size: 22px;}
+        #btn-voice { margin-left: 10px; border-left: 1px solid rgba(0,240,255,0.3); border-radius: 0 50% 50% 0; padding-left: 15px;}
+    </style>
+</head>
+<body>
+
+    <div class="watermark">
+        <img src="image_b5e682.png" alt="Energki" class="logo-watermark">
+    </div>
+
+    <div class="scene" id="scene">
+        
+        <div id="intro-splash">
+            <img src="image_b5e682.png" alt="Energki Logo" class="logo-splash">
+            <p>Capacitación Técnica</p>
+        </div>
+
+        <svg class="svg-overlay">
+            <line id="line-fab" x1="18%" y1="42%" x2="8%" y2="25%" stroke="#ffaa00" stroke-width="2" class="dashed-line" />
+            <line id="line-cli" x1="32%" y1="48%" x2="28%" y2="15%" stroke="#00ff88" stroke-width="2" class="dashed-line" />
+            <line id="line-proy" x1="38%" y1="58%" x2="55%" y2="10%" stroke="#b000ff" stroke-width="2" class="dashed-line" />
+            <line id="line-iden" x1="62%" y1="40%" x2="85%" y2="25%" stroke="#00aaff" stroke-width="2" class="dashed-line" />
+            <line id="line-tec" x1="28%" y1="68%" x2="8%" y2="55%" stroke="#ff0055" stroke-width="2" class="dashed-line" />
+            <line id="line-colores" x1="75%" y1="70%" x2="82%" y2="60%" stroke="#ccff00" stroke-width="2" class="dashed-line" />
+        </svg>
+
+        <div class="document-base" id="doc"></div>
+
+        <div class="pop-panel" id="panel-fabricante">
+            <h3>Fabricante</h3>
+            <p>Clevertech S.p.A.</p>
+        </div>
+
+        <div class="pop-panel" id="panel-cliente">
+            <h3>Cliente Final</h3>
+            <p>Nestlé Purina Hartwell</p>
+        </div>
+        
+        <div class="pop-panel" id="panel-proyecto">
+            <h3>Descripción del Proyecto</h3>
+            <p>PALLETIZER/DEPALLETIZER CAPTIVE 3OZ LINE 1</p>
+        </div>
+
+        <div class="pop-panel" id="panel-identificacion">
+            <h3>Identificación del Equipo</h3>
+            <div class="data-grid">
+                <div>Serial Number</div><div>PRJ230029</div>
+                <div>Machine</div><div>P02546-CP1</div>
+                <div>Electric Diagram N°</div><div>PRJ230029_P02546-CP1</div>
+            </div>
+        </div>
+
+        <div class="pop-panel" id="panel-tecnico">
+            <h3>Datos de Alimentación</h3>
+            <div class="data-grid">
+                <div>Potencia Nominal</div><div>98 KW</div>
+                <div>Corriente Nominal</div><div>118 A</div>
+                <div>Frecuencia</div><div>60 Hz</div>
+                <div>Voltaje de Operación</div><div>480 V</div>
+                <div>Tensión Auxiliar</div><div>24 VDC</div>
+                <div>Corriente Corto Circuito</div><div>65 KA</div>
+                <div>Normativa de Referencia</div><div>UL + STICKER</div>
+            </div>
+        </div>
+
+        <div class="pop-panel" id="panel-colores">
+            <h3>Código de Colores (Cableado)</h3>
+            <div class="color-row">
+                <div class="color-box cb-black"></div> <b>L1, L2, L3:</b>&nbsp; Potencia Principal (220V/380V/480V)
+            </div>
+            <div class="color-row">
+                <div class="color-box cb-green"></div> <b>PE:</b>&nbsp; Tierra (Yellow/Green)
+            </div>
+            <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 8px 0;"></div>
+            <div class="color-row">
+                <div class="color-box cb-orange"></div> <b style="color:#ff8800;">ALERTA:</b>&nbsp; Energizado aún con Main Switch en OFF
+            </div>
+            <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 8px 0;"></div>
+            <div class="color-row">
+                <div class="color-box cb-red"></div> <b>110 / 220 VAC:</b>&nbsp; Control Corriente Alterna
+            </div>
+            <div class="color-row">
+                <div class="color-box cb-white"></div> <b>0 VAC:</b>&nbsp; Común Corriente Alterna
+            </div>
+            <div class="color-row">
+                <div class="color-box cb-blue"></div> <b>24 VDC:</b>&nbsp; Control Corriente Directa
+            </div>
+            <div class="color-row">
+                <div class="color-box cb-whiteblue"></div> <b>0 VDC:</b>&nbsp; Común Corriente Directa
+            </div>
+        </div>
+
+    </div>
+
+    <div class="ui-container">
+        <div id="subtitle-box"><span class="k-word highlight">Presiona</span> <span class="k-word highlight">Play</span> <span class="k-word highlight">para</span> <span class="k-word highlight">Iniciar</span> <span class="k-word highlight">la</span> <span class="k-word highlight">Capacitación</span></div>
+        
+        <div class="controls-bar">
+            <button class="ctrl-btn" id="btn-restart" title="Reiniciar al Inicio">🔄</button>
+            <button class="ctrl-btn" id="btn-prev" title="Regresar">⏮</button>
+            <button class="ctrl-btn" id="btn-play" title="Reproducir / Pausar">▶</button>
+            <button class="ctrl-btn" id="btn-next" title="Adelantar">⏭</button>
+            <button class="ctrl-btn" id="btn-voice" title="Activar/Desactivar Voz">🔊</button>
+        </div>
+    </div>
+
+    <script>
+        const scene = document.getElementById('scene');
+        const introSplash = document.getElementById('intro-splash'); 
+        const subtitleBox = document.getElementById('subtitle-box');
+        const btnPlay = document.getElementById('btn-play');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        const btnRestart = document.getElementById('btn-restart');
+        const btnVoice = document.getElementById('btn-voice');
+        
+        const panelFabricante = document.getElementById('panel-fabricante');
+        const panelCliente = document.getElementById('panel-cliente');
+        const panelProyecto = document.getElementById('panel-proyecto');
+        const panelIdentificacion = document.getElementById('panel-identificacion');
+        const panelTecnico = document.getElementById('panel-tecnico');
+        const panelColores = document.getElementById('panel-colores');
+        
+        const lineFab = document.getElementById('line-fab');
+        const lineCli = document.getElementById('line-cli');
+        const lineProy = document.getElementById('line-proy');
+        const lineIden = document.getElementById('line-iden');
+        const lineTec = document.getElementById('line-tec');
+        const lineColores = document.getElementById('line-colores');
+
+        let currentStep = -1;
+        let isPlaying = false;
+        let autoPlayTimer = null;
+        let voiceEnabled = true;
+        let currentUtteranceId = 0; 
+        let currentWordData = []; 
+
+        const steps = [
+            { 
+                text: "Hola, les doy la bienvenida. Soy Mateo, su instructor virtual en Energki Robotics.", 
+                activate: () => { scene.classList.add('splash-active'); introSplash.classList.add('active'); }, 
+                deactivate: () => { scene.classList.remove('splash-active'); introSplash.classList.remove('active'); } 
+            },
+            { 
+                text: "El objetivo de este curso es desarrollar las habilidades necesarias para entender e interpretar de manera segura, un diagrama eléctrico de Clevertech.", 
+                activate: () => { scene.classList.add('splash-active'); introSplash.classList.add('active'); }, 
+                deactivate: () => {} 
+            },
+            { 
+                text: "Comencemos. Lo primero que vemos al abrir nuestro manual, es la página de portada.", 
+                activate: () => { scene.classList.remove('splash-active'); introSplash.classList.remove('active'); scene.classList.add('is-3d'); }, 
+                deactivate: () => { scene.classList.remove('is-3d'); scene.classList.add('splash-active'); introSplash.classList.add('active'); } 
+            },
+            { text: "Aquí no solo confirmamos que Clevertech es el fabricante...", activate: () => { panelFabricante.classList.add('active'); lineFab.classList.add('active'); }, deactivate: () => { panelFabricante.classList.remove('active'); lineFab.classList.remove('active'); } },
+            { text: "Sino que identificamos claramente el cliente final...", activate: () => { panelCliente.classList.add('active'); lineCli.classList.add('active'); }, deactivate: () => { panelCliente.classList.remove('active'); lineCli.classList.remove('active'); } },
+            { text: "Y la descripción exacta de la máquina y el proyecto a intervenir.", activate: () => { panelProyecto.classList.add('active'); lineProy.classList.add('active'); }, deactivate: () => { panelProyecto.classList.remove('active'); lineProy.classList.remove('active'); } },
+            { text: "Para solicitar refacciones, aquí validamos el número de serie y diagrama eléctrico.", activate: () => { panelIdentificacion.classList.add('active'); lineIden.classList.add('active'); }, deactivate: () => { panelIdentificacion.classList.remove('active'); lineIden.classList.remove('active'); } },
+            { text: "Pero aún más importante para nuestro trabajo de campo y seguridad:", activate: () => {}, deactivate: () => {} },
+            { text: "Llegamos a los Datos de Alimentación. Una máquina puede tener múltiples tableros, pero como vimos en la identificación azul, este manual corresponde a un único panel eléctrico principal.", activate: () => { panelTecnico.classList.add('active'); lineTec.classList.add('active'); }, deactivate: () => { panelTecnico.classList.remove('active'); lineTec.classList.remove('active'); } },
+            { text: "La Potencia Nominal representa el consumo eléctrico máximo calculado sumando los componentes internos y todos los elementos de campo, como sensores, islas de válvulas y variadores de frecuencia.", activate: () => {}, deactivate: () => {} },
+            { text: "La Corriente Nominal es el amperaje de diseño a plena carga, aquí 118 Amperes. La Frecuencia es de 60 Hertz, estándar en América, a diferencia de los 50 Hertz comunes en Europa o Asia.", activate: () => {}, deactivate: () => {} },
+            { text: "El Voltaje de Operación indica 480 Voltios trifásicos con conexión a tierra física, sin requerir neutro. Además, la Tensión Auxiliar de 24 Voltios de corriente directa, es la energía de control para el P.L.C. y sus periféricos.", activate: () => {}, deactivate: () => {} },
+            { text: "También se especifica la Corriente de Corto Circuito de 65 Kilo Amperes, que es la capacidad máxima que soporta antes de un fallo catastrófico. Y por último, la Normativa de Referencia, indicando que el tablero cumple con el estándar americano U.L. y lleva su etiqueta de certificación.", activate: () => {}, deactivate: () => {} },
+            { text: "Finalmente, el código de colores. Las líneas de potencia L1, L2 y L3 SIEMPRE son NEGRAS, contengan 220, 380 o 480 Voltios.", activate: () => { panelColores.classList.add('active'); lineColores.classList.add('active'); }, deactivate: () => { panelColores.classList.remove('active'); lineColores.classList.remove('active'); } },
+            { text: "La Tierra Física será VERDE o AMARILLO con VERDE. ¡Cuidado con el cable NARANJA! Significa que tiene voltaje aunque el interruptor principal esté apagado.", activate: () => {}, deactivate: () => {} },
+            { text: "Y para control: ROJO para corriente alterna, AZUL para directa, y BLANCO para los comunes. Verifícalos siempre antes de intervenir.", activate: () => {}, deactivate: () => {} }
+        ];
+
+        function renderStepText(text) {
+            let html = '';
+            let charCount = 0;
+            currentWordData = [];
+            
+            let words = text.split(' ');
+            words.forEach((w, i) => {
+                html += `<span id="kw-${i}" class="k-word">${w}</span> `;
+                currentWordData.push({ id: `kw-${i}`, start: charCount });
+                charCount += w.length + 1; 
+            });
+            subtitleBox.innerHTML = html;
+        }
+
+        function renderStep(targetIndex) {
+            steps.forEach(s => s.deactivate());
+            
+            for(let i = 0; i <= targetIndex; i++) {
+                if(i >= 0) steps[i].activate();
+            }
+
+            if (targetIndex >= 0 && targetIndex < steps.length) {
+                renderStepText(steps[targetIndex].text);
+            } else if (targetIndex < 0) {
+                subtitleBox.innerHTML = '<span class="k-word highlight">Presiona</span> <span class="k-word highlight">Play</span> <span class="k-word highlight">para</span> <span class="k-word highlight">Iniciar</span> <span class="k-word highlight">la</span> <span class="k-word highlight">Capacitación</span>';
+            }
+        }
+
+        function playCurrentStep() {
+            if (currentStep < 0 || currentStep >= steps.length) return;
+            
+            const text = steps[currentStep].text;
+            currentUtteranceId++;
+            let myUtteranceId = currentUtteranceId;
+            
+            clearTimeout(autoPlayTimer);
+
+            if (voiceEnabled && 'speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'es-MX'; 
+                utterance.rate = 1.0; 
+                utterance.pitch = 1.0; 
+                
+                utterance.onboundary = (event) => {
+                    if (event.name === 'word' && isPlaying) {
+                        let cIndex = event.charIndex;
+                        currentWordData.forEach(wd => {
+                            if (cIndex >= wd.start - 1) {
+                                let el = document.getElementById(wd.id);
+                                if(el) el.classList.add('highlight');
+                            }
+                        });
+                    }
+                };
+
+                utterance.onend = () => {
+                    if (myUtteranceId !== currentUtteranceId || !isPlaying) return;
+                    
+                    currentWordData.forEach(wd => {
+                        let el = document.getElementById(wd.id);
+                        if(el) el.classList.add('highlight');
+                    });
+
+                    autoPlayTimer = setTimeout(() => {
+                        if (isPlaying) goNextAuto();
+                    }, 1000); 
+                };
+
+                window.speechSynthesis.speak(utterance);
+            } else {
+                currentWordData.forEach(wd => {
+                    let el = document.getElementById(wd.id);
+                    if(el) el.classList.add('highlight');
+                });
+                
+                let readingTime = (text.length * 70) + 1000; 
+                autoPlayTimer = setTimeout(() => {
+                    if (isPlaying && myUtteranceId === currentUtteranceId) goNextAuto();
+                }, readingTime);
+            }
+        }
+
+        function goNextAuto() {
+            if (currentStep < steps.length - 1) {
+                currentStep++;
+                renderStep(currentStep);
+                playCurrentStep();
+            } else {
+                pause();
+                subtitleBox.innerHTML = '<span class="k-word highlight">Módulo</span> <span class="k-word highlight">1</span> <span class="k-word highlight">Completado.</span> <span class="k-word highlight">(Usa</span> <span class="k-word highlight">⏪</span> <span class="k-word highlight">o</span> <span class="k-word highlight">🔄)</span>';
+            }
+        }
+
+        btnVoice.addEventListener('click', () => {
+            voiceEnabled = !voiceEnabled;
+            btnVoice.innerHTML = voiceEnabled ? "🔊" : "🔇";
+            if (!voiceEnabled) window.speechSynthesis.cancel();
+            else if (isPlaying && currentStep >= 0) playCurrentStep();
+        });
+
+        function play() {
+            if (currentStep === steps.length - 1) currentStep = -1; 
+            isPlaying = true;
+            btnPlay.innerHTML = "⏸";
+            
+            if (currentStep === -1) {
+                currentStep = 0;
+                renderStep(currentStep);
+            }
+            playCurrentStep();
+        }
+
+        function pause() {
+            isPlaying = false;
+            btnPlay.innerHTML = "▶";
+            clearTimeout(autoPlayTimer);
+            window.speechSynthesis.cancel();
+            currentUtteranceId++; 
+        }
+
+        function togglePlay() {
+            isPlaying ? pause() : play();
+        }
+
+        function goNext() {
+            pause(); 
+            if (currentStep < steps.length - 1) {
+                currentStep++;
+                renderStep(currentStep);
+                currentWordData.forEach(wd => { let el = document.getElementById(wd.id); if(el) el.classList.add('highlight'); });
+            }
+        }
+
+        function goPrev() {
+            pause(); 
+            if (currentStep > 0) {
+                currentStep--;
+                renderStep(currentStep);
+                currentWordData.forEach(wd => { let el = document.getElementById(wd.id); if(el) el.classList.add('highlight'); });
+            } else if (currentStep === 0) {
+                resetPresentation();
+            }
+        }
+
+        function resetPresentation() {
+            pause(); 
+            currentStep = -1;
+            renderStep(currentStep); 
+        }
+
+        btnPlay.addEventListener('click', togglePlay);
+        btnNext.addEventListener('click', goNext);
+        btnPrev.addEventListener('click', goPrev);
+        btnRestart.addEventListener('click', resetPresentation);
+
+    </script>
+</body>
+</html>

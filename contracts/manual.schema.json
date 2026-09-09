@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prp-energki.example/contracts/manual.schema.json",
+  "title": "Training manual content",
+  "type": "object",
+  "required": ["schemaVersion", "configuracion", "paneles"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+    "version": { "type": "integer", "minimum": 1 },
+    "configuracion": {
+      "type": "object",
+      "required": ["instructor", "empresa"],
+      "additionalProperties": true,
+      "properties": {
+        "instructor": { "type": "string" },
+        "empresa": { "type": "string" }
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "required": ["assetId"],
+      "additionalProperties": true,
+      "properties": {
+        "assetId": { "type": "string", "minLength": 1 },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "paneles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "color", "origen", "narrativa"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "color": { "type": "string", "minLength": 1 },
+          "origen": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number", "minimum": 0, "maximum": 100 },
+              "y": { "type": "number", "minimum": 0, "maximum": 100 }
+            },
+            "additionalProperties": false
+          },
+          "narrativa": { "type": "string" }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "order", "text", "panelIds"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "order": { "type": "integer", "minimum": 1 },
+          "text": { "type": "string" },
+          "panelIds": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
