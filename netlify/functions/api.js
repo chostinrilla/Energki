@@ -281,13 +281,38 @@ async function uploadAsset(payload) {
   });
   const fileId = createRes.data.id;
 
-  await drive.permissions.create({
-    fileId,
-    requestBody: { role: 'reader', type: 'anyone' },
-    supportsAllDrives: true,
-  });
+  // No se intenta compartir el archivo como "cualquiera con el enlace": la
+  // política de la unidad compartida de la empresa lo rechaza (error de
+  // Google "publishOutNotPermitted"). En vez de eso, la imagen se sirve a
+  // través de getAsset, que la lee con la cuenta de servicio y la entrega
+  // sin necesidad de que el archivo sea público.
+  return { assetId: fileId, url: `/.netlify/functions/api?action=getAsset&id=${fileId}` };
+}
 
-  return { assetId: fileId, url: `https://lh3.googleusercontent.com/d/${fileId}` };
+// Sirve el contenido de un archivo de Drive usando la cuenta de servicio,
+// sin depender de que el archivo tenga un enlace público (ver nota en
+// uploadAsset). El resultado se puede cachear agresivamente porque cada
+// imagen subida crea un archivo nuevo; el mismo id nunca cambia de contenido.
+async function getAsset(fileId) {
+  if (!fileId) return respond({ error: 'Falta el id del archivo' }, 400);
+  const drive = await getDriveClient();
+  const meta = await drive.files.get({ fileId, fields: 'mimeType, name', supportsAllDrives: true });
+  const media = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' }
+  );
+  return {
+    statusCode: 200,
+    headers: {
+      'Content-Type': meta.data.mimeType || 'application/octet-stream',
+      'Access-Control-Allow-Origin': '*',
+      // El id de un archivo nunca cambia de contenido (cada imagen nueva crea
+      // un archivo nuevo), así que se puede cachear de forma permanente.
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+    body: Buffer.from(media.data).toString('base64'),
+    isBase64Encoded: true,
+  };
 }
 
 // ---- Handler HTTP ----
@@ -300,6 +325,7 @@ exports.handler = async (event) => {
       const action = (event.queryStringParameters || {}).action;
       if (action === 'listTrainings') return respond(await listTrainings());
       if (action === 'getTraining') return respond(await getTraining((event.queryStringParameters || {}).id));
+      if (action === 'getAsset') return await getAsset((event.queryStringParameters || {}).id);
       return respond({ error: 'Acción no reconocida: ' + action });
     }
 

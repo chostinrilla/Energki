@@ -72,89 +72,25 @@
             background-image: radial-gradient(circle at center, #0f172a 0%, #050a12 100%);
             position: relative;
             padding: 20px;
-            /* Valor de referencia (el mismo que usa el reproductor); se sobreescribe
-               en JS proporcional al tamaño real de .canvas-container (ver
-               applyPreviewTiltScale) porque acá compite con la barra lateral y no
-               siempre mide 1020px como en el reproductor — con perspective fijo en
-               px, una caja más chica se ve más deformada con el mismo ángulo. */
-            perspective: 1200px;
         }
-
-        .preview-toggle-btn {
-            position: absolute; top: 16px; right: 20px;
-            width: auto; margin-top: 0; padding: 8px 16px; font-size: 13px;
-        }
-        .preview-toggle-btn.active { background: #00f0ff; color: #000; box-shadow: 0 0 12px rgba(0,240,255,0.6); }
 
         .canvas-container {
             position: relative;
-            /* Mismo 85% / 1020px máx. que usa el reproductor (.scene max-width:1200px
-               × #dynamic-stage width:85% = 1020px): perspective/translateZ son valores
-               fijos en px, así que si la caja mide distinto, la MISMA inclinación se ve
-               distinta (más o menos exagerada). Igualando el tamaño, se ve igual. */
-            width: 85%;
-            max-width: 1020px;
+            width: 80%;
+            max-width: 800px;
             aspect-ratio: 1.4 / 1;
             background: #111;
             border: 2px dashed rgba(0, 240, 255, 0.3);
             border-radius: 8px;
-            /* Mismo tiempo que la inclinación de .canvas-tilt (2s): si no, al
-               salir de Vista Previa este fondo/borde reaparecía de golpe mientras
-               la imagen todavía tardaba en regresar a plano, y se veía como si el
-               lienzo negro "cortara" la imagen a medio camino. */
-            transition: background 2s ease, border-color 2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: crosshair;
-            /* Sin esto, el perspective de .workspace no le llegaba a .canvas-tilt
-               (su nieto, no su hijo directo) — perspective solo pasa a los hijos
-               DIRECTOS de quien lo declara, a menos que los intermedios tengan
-               preserve-3d para "pasarlo" hacia abajo. Por eso el slider de
-               perspective no hacía nada: nunca llegaba a donde debía. */
-            transform-style: preserve-3d;
         }
         /* Modo edición: ya no se está creando un punto nuevo, se está moviendo uno existente. */
         .canvas-container.editing-mode { cursor: grab; }
         .canvas-container.editing-mode:active { cursor: grabbing; }
         .canvas-container.editing-mode .marker { background: #00f0ff; box-shadow: 0 0 10px #00f0ff; }
-
-        /* Envuelve la imagen y los pines: es lo único que se inclina en Vista
-           Previa (mismos valores que .dyn-doc del reproductor), así los pines
-           quedan pegados a la imagen sin importar el ángulo. */
-        .canvas-tilt {
-            position: absolute; inset: 0;
-            transform-style: preserve-3d;
-            transition: transform 2s cubic-bezier(0.25, 1, 0.5, 1);
-            transform: rotateX(0deg) rotateZ(0deg) translateZ(0px);
-        }
-        .canvas-container.preview-mode .canvas-tilt {
-            /* --tilt-z la pone applyPreviewTiltScale(), proporcional al tamaño real
-               de la caja (15px es solo el valor de respaldo antes de que corra el JS). */
-            transform: rotateX(55deg) rotateZ(-20deg) translateZ(var(--tilt-z, 15px));
-            /* Marco propio (igual que .dyn-doc del reproductor): .canvas-tilt es lo
-               único que se inclina, pero .canvas-container (el fondo negro con
-               borde punteado, pensado para el modo plano normal) se queda plano —
-               por eso se veía como una hoja negra atravesada por la imagen
-               inclinada. Aquí se le da su propio fondo/sombra, y abajo se apaga
-               el de canvas-container mientras dure la Vista Previa. */
-            background: #111;
-            border-radius: 4px;
-            overflow: hidden;
-            box-shadow: -30px 40px 50px rgba(0,0,0,0.9);
-        }
-        .canvas-container.preview-mode {
-            background: transparent;
-            border-color: transparent;
-        }
-
-        /* Capa plana para las tarjetas de vista previa: nunca se inclina, para
-           que el texto siga siendo legible (igual que en el reproductor). */
-        .card-overlay { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
-        .canvas-container.preview-mode .card-overlay { opacity: 1; pointer-events: auto; }
-        .card-overlay-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; }
-        .canvas-container.preview-mode .card-overlay-svg { opacity: 1; }
-        .preview-line { stroke-dasharray: 8 8; opacity: 0.9; }
 
         #preview-img {
             width: 100%; height: 100%;
@@ -163,10 +99,6 @@
             object-fit: contain;
             border-radius: 6px;
             display: none;
-            /* Igual que #dynamic-image en el reproductor: si la imagen real no es
-               exactamente 1.4:1, "contain" deja franjas — sin esto se veía el
-               fondo negro de .canvas-container detrás, que se notaba feo inclinado. */
-            background: #fff;
         }
 
         .placeholder-text { color: #556; font-size: 20px; position: absolute; pointer-events: none;}
@@ -326,33 +258,6 @@
             box-shadow: 0 0 0 3px rgba(255,255,255,0.7), 0 0 16px rgba(255,255,255,0.9);
         }
 
-        /* --- TARJETAS DE VISTA PREVIA (copiado del reproductor: mismo look) --- */
-        .pop-panel {
-            position: absolute;
-            background: rgba(5, 10, 18, 0.95);
-            backdrop-filter: blur(12px);
-            border: 1px solid #00f0ff;
-            border-radius: 8px;
-            padding: 15px 25px;
-            box-shadow: 0 0 25px rgba(0, 240, 255, 0.2);
-            z-index: 50;
-        }
-        .pop-panel h3 { margin: 0 0 8px 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1.5px; }
-        .pop-panel p { margin: 0; font-size: 20px; font-weight: bold; color: #fff; }
-        .data-grid { display: grid; grid-template-columns: 1fr auto; gap: 4px; font-size: 14px; color: #d0d0d0; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 5px; }
-        .data-grid div { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .data-grid div:nth-child(even) { text-align: right; font-weight: bold; color: #fff; }
-        .data-list { display: flex; flex-direction: column; gap: 7px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px; margin-top: 2px; }
-        .campo-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.4; color: #d0d0d0; }
-        .campo-swatch { width: 13px; height: 13px; border-radius: 3px; margin-top: 3px; border: 1px solid rgba(255,255,255,0.3); flex-shrink: 0; }
-        .campo-row b { color: #fff; }
-
-        .preview-card {
-            max-width: 300px;
-            transform: translate(-50%, -50%);
-            cursor: default; /* la Etapa 3 lo cambia a "grab" cuando ya se pueda arrastrar */
-        }
-
         /* --- MODAL PROPIO (reemplaza alert()/confirm() del navegador) --- */
         .modal-overlay {
             position: fixed; inset: 0;
@@ -497,20 +402,11 @@
     <!-- ÁREA DE TRABAJO (CANVAS) -->
     <div class="workspace">
         <h2 style="position: absolute; top: 20px; color: rgba(255,255,255,0.5);">Área de Mapeo Visual</h2>
-        <button type="button" id="btn-preview-3d" class="btn btn-secondary preview-toggle-btn" onclick="togglePreview()">Vista Previa 3D</button>
-
+        
         <div class="canvas-container" id="canvas-container">
             <span class="placeholder-text" id="placeholder-text">Sube una imagen para comenzar</span>
-            <!-- Se inclina en 3D en modo Vista Previa (mismos valores que el
-                 reproductor): contiene la imagen y los pines, que así quedan
-                 pegados a la imagen sin importar el ángulo. -->
-            <div class="canvas-tilt" id="canvas-tilt">
-                <img id="preview-img" alt="Vista previa del manual">
-                <div id="marker" class="marker" style="display: none;"></div>
-            </div>
-            <!-- Capa plana (nunca se inclina): tarjetas de vista previa + sus líneas. -->
-            <div class="card-overlay" id="card-overlay"></div>
-            <svg class="card-overlay-svg" id="card-overlay-svg"></svg>
+            <img id="preview-img" alt="Vista previa del manual">
+            <div id="marker" class="marker" style="display: none;"></div>
         </div>
     </div>
 
@@ -597,10 +493,6 @@
         const previewImg = document.getElementById('preview-img');
         const placeholderText = document.getElementById('placeholder-text');
         const canvasContainer = document.getElementById('canvas-container');
-        const canvasTilt = document.getElementById('canvas-tilt');
-        const cardOverlay = document.getElementById('card-overlay');
-        const cardOverlaySvg = document.getElementById('card-overlay-svg');
-        const btnPreview3d = document.getElementById('btn-preview-3d');
         const marker = document.getElementById('marker');
 
         const coordXInput = document.getElementById('coord-x');
@@ -656,174 +548,9 @@
                     beginDragPanel(panel.id);
                 });
                 dot.addEventListener('click', function(e) { e.stopPropagation(); });
-                // Adentro de canvas-tilt (no canvasContainer): así el pin queda
-                // pegado a la imagen cuando se inclina en Vista Previa.
-                canvasTilt.appendChild(dot);
+                canvasContainer.appendChild(dot);
             });
         }
-
-        // --- Vista Previa 3D: mismo giro que el reproductor, para colocar/mover
-        // tarjetas viendo ya la perspectiva final (no la plana del editor). ---
-
-        // Copiado tal cual de viewer.html (renderPopupContent): mismo contenido
-        // para que la tarjeta se vea idéntica a como saldrá en el reproductor.
-        function renderPopupContent(panel) {
-            let html = `<h3>${panel.titulo || panel.id}</h3>`;
-            if (panel.resumen) html += `<p>${panel.resumen}</p>`;
-            if (Array.isArray(panel.campos) && panel.campos.length) {
-                const hasSwatches = panel.campos.some(c => c.color);
-                if (hasSwatches) {
-                    html += '<div class="data-list">';
-                    panel.campos.forEach(c => {
-                        const swatch = `<span class="campo-swatch" style="background:${c.color || 'transparent'}; ${c.color ? '' : 'border-color:transparent;'}"></span>`;
-                        html += `<div class="campo-row">${swatch}<span><b>${c.label}:</b> ${c.valor}</span></div>`;
-                    });
-                    html += '</div>';
-                } else {
-                    html += '<div class="data-grid">';
-                    panel.campos.forEach(c => {
-                        html += `<div>${c.label}</div><div>${c.valor}</div>`;
-                    });
-                    html += '</div>';
-                }
-            } else if (!panel.resumen && panel.narrativa) {
-                html += `<p style="font-size: 14px; font-weight: normal; color: #ccc;">${panel.narrativa}</p>`;
-            }
-            return html;
-        }
-
-        // Posición inicial para un punto que todavía no tiene "tarjeta" guardada:
-        // cerca de su pin, corrida un poco hacia el lado contrario del centro. No
-        // necesita ser perfecta — es solo un punto de partida para arrastrar (Etapa
-        // 3); nunca se guarda en el punto hasta que alguien la mueva de verdad.
-        function defaultCardPos(panel) {
-            const x = parseFloat(panel.origen.x);
-            const y = parseFloat(panel.origen.y);
-            const safeX = isFinite(x) ? x : 50;
-            const safeY = isFinite(y) ? y : 50;
-            const left = safeX < 50 ? Math.max(safeX - 18, 6) : Math.min(safeX + 18, 94);
-            return { top: Math.min(Math.max(safeY, 6), 94) + '%', left: left + '%' };
-        }
-
-        // { panel, pinEl, card, line } de cada tarjeta mostrada en Vista Previa.
-        let previewItems = [];
-
-        function updatePreviewLineEnd(item) {
-            const overlayRect = cardOverlay.getBoundingClientRect();
-            if (!overlayRect.width || !overlayRect.height) return;
-            const cardRect = item.card.getBoundingClientRect();
-            const x2Pct = ((cardRect.left + cardRect.width / 2 - overlayRect.left) / overlayRect.width) * 100;
-            const y2Pct = ((cardRect.top + cardRect.height / 2 - overlayRect.top) / overlayRect.height) * 100;
-            if (isFinite(x2Pct)) item.line.setAttribute('x2', x2Pct + '%');
-            if (isFinite(y2Pct)) item.line.setAttribute('y2', y2Pct + '%');
-        }
-
-        function renderPreviewCards() {
-            cardOverlay.innerHTML = '';
-            cardOverlaySvg.innerHTML = '';
-            previewItems = [];
-
-            manualData.paneles.forEach(panel => {
-                try {
-                    const pinEl = canvasTilt.querySelector(`.existing-marker[data-id="${CSS.escape(panel.id)}"]`);
-                    if (!pinEl) return;
-                    const color = panel.color || '#00f0ff';
-
-                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    line.setAttribute('stroke', color);
-                    line.setAttribute('stroke-width', '2');
-                    line.setAttribute('class', 'preview-line');
-                    cardOverlaySvg.appendChild(line);
-
-                    const card = document.createElement('div');
-                    card.className = 'pop-panel preview-card';
-                    card.dataset.id = panel.id;
-                    card.style.borderColor = color;
-                    card.style.boxShadow = `0 0 25px ${color}55`;
-                    card.innerHTML = renderPopupContent(panel);
-                    cardOverlay.appendChild(card);
-
-                    const pos = panel.tarjeta || defaultCardPos(panel);
-                    card.style.top = pos.top;
-                    card.style.left = pos.left;
-
-                    const item = { panel, pinEl, card, line };
-                    previewItems.push(item);
-                    updatePreviewLineEnd(item);
-                } catch (e) {
-                    console.error('No se pudo mostrar la vista previa de un punto', panel && panel.id, e);
-                }
-            });
-        }
-
-        // x1/y1 (lado del pin) se siguen en vivo, igual que syncDynLines en el
-        // reproductor: el pin vive dentro de canvas-tilt, que al inclinarse ya no
-        // es una simple posición porcentual — hay que medir su posición real en
-        // pantalla cada cuadro. Corre siempre; no hace nada si no hay vista previa activa.
-        function syncPreviewLines() {
-            if (previewItems.length) {
-                const overlayRect = cardOverlay.getBoundingClientRect();
-                if (overlayRect.width && overlayRect.height) {
-                    previewItems.forEach(({ pinEl, line }) => {
-                        try {
-                            const pinRect = pinEl.getBoundingClientRect();
-                            const xPct = ((pinRect.left + pinRect.width / 2 - overlayRect.left) / overlayRect.width) * 100;
-                            const yPct = ((pinRect.top + pinRect.height / 2 - overlayRect.top) / overlayRect.height) * 100;
-                            if (isFinite(xPct) && isFinite(yPct)) {
-                                line.setAttribute('x1', xPct + '%');
-                                line.setAttribute('y1', yPct + '%');
-                            }
-                        } catch (e) { /* si un punto falla, que no tumbe a los demás */ }
-                    });
-                }
-            }
-            requestAnimationFrame(syncPreviewLines);
-        }
-        requestAnimationFrame(syncPreviewLines);
-
-        // El reproductor calibró perspective:1200px/translateZ:15px para una caja
-        // de 1020px de ancho (.scene max-width:1200px × #dynamic-stage 85%). Acá
-        // el área de trabajo compite con la barra lateral (400px), así que
-        // .canvas-container casi nunca mide esos 1020px — con perspective/translateZ
-        // fijos en px, la MISMA inclinación se ve más o menos deformada según qué
-        // tan chica salga la caja. Se escalan los dos en la misma proporción que el
-        // ancho real, así la deformación se ve igual sin importar el tamaño de pantalla.
-        const workspaceEl = document.querySelector('.workspace');
-        const TILT_REF_WIDTH = 1020;
-        const TILT_REF_PERSPECTIVE = 1200;
-        const TILT_REF_TRANSLATE_Z = 15;
-        function applyPreviewTiltScale() {
-            const actualWidth = canvasContainer.getBoundingClientRect().width;
-            if (!actualWidth) return;
-            const scale = actualWidth / TILT_REF_WIDTH;
-            workspaceEl.style.perspective = (TILT_REF_PERSPECTIVE * scale) + 'px';
-            canvasTilt.style.setProperty('--tilt-z', (TILT_REF_TRANSLATE_Z * scale) + 'px');
-        }
-
-        function togglePreview() {
-            const active = canvasContainer.classList.toggle('preview-mode');
-            btnPreview3d.classList.toggle('active', active);
-            btnPreview3d.textContent = active ? 'Cerrar Vista Previa' : 'Vista Previa 3D';
-            if (active) {
-                applyPreviewTiltScale();
-                renderPreviewCards();
-            } else {
-                cardOverlay.innerHTML = '';
-                cardOverlaySvg.innerHTML = '';
-                previewItems = [];
-                // Limpia lo que puso applyPreviewTiltScale para que, si se vuelve a
-                // entrar a Vista Previa, arranque limpio desde cero.
-                workspaceEl.style.perspective = '';
-                canvasTilt.style.removeProperty('--tilt-z');
-            }
-        }
-
-        // Si la ventana cambia de tamaño mientras Vista Previa está abierta (o la
-        // barra lateral cambia de ancho), se recalcula para que la caja no quede
-        // con el escalado de un tamaño viejo.
-        window.addEventListener('resize', () => {
-            if (canvasContainer.classList.contains('preview-mode')) applyPreviewTiltScale();
-        });
 
         // --- Lista de puntos existentes: ver, buscar, editar, reposicionar, eliminar ---
         let editingPanelId = null;
@@ -1114,7 +841,6 @@
 
             renderExistingMarkers();
             renderPanelList();
-            if (canvasContainer.classList.contains('preview-mode')) renderPreviewCards();
         }
 
         // Si venimos del dashboard con ?id=..., cargar el manual existente
@@ -1161,11 +887,6 @@
         let justDraggedPanel = false;
 
         async function beginDragPanel(id) {
-            // En Vista Previa la imagen está inclinada en 3D: la matemática de
-            // abajo (porcentaje plano sobre canvasContainer) ya no aplicaría bien.
-            // Mover pines solo se hace en modo plano normal.
-            if (canvasContainer.classList.contains('preview-mode')) return;
-
             // Si hace falta confirmar (había cambios sin guardar en otro punto), el
             // gesto de "mantener presionado" ya se perdió esperando esa respuesta:
             // el punto queda seleccionado, pero no se intenta reanudar el arrastre.
@@ -1222,7 +943,6 @@
 
         // 2. Mapeo Visual: Clic en la imagen para obtener coordenadas
         canvasContainer.addEventListener('click', function(e) {
-            if (canvasContainer.classList.contains('preview-mode')) return; // en Vista Previa no se crean puntos
             if (justDraggedPanel) return; // el clic viene de soltar un arrastre, no de crear un punto
             if (previewImg.style.display === 'none') return; // No hacer nada si no hay imagen
 
@@ -1291,7 +1011,6 @@
                 cancelEditPanel();
                 renderExistingMarkers();
                 renderPanelList();
-                if (canvasContainer.classList.contains('preview-mode')) renderPreviewCards();
                 return;
             }
 

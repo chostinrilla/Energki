@@ -280,14 +280,6 @@
         .dyn-popup.pop-panel.side-left { left: -14%; transform-origin: left center; }
         .dyn-popup.pop-panel.side-right { right: -14%; transform-origin: right center; }
 
-        /* Posición guardada a mano desde la Vista Previa del editor
-           (panel.tarjeta): a diferencia de las automáticas (que solo se
-           centran verticalmente y anclan un borde fijo al costado), esta se
-           centra en los dos ejes porque "top"/"left" ya son el punto exacto
-           que la persona eligió al arrastrarla. */
-        .dyn-popup.pop-panel.explicit-pos { transform: translate(-50%, -50%) scale(0.9); }
-        .dyn-popup.pop-panel.explicit-pos.active { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-
         /* --- UI Y EFECTO KARAOKE --- */
         .ui-container {
             position: fixed; /* ancla al viewport real del navegador, no al alto de la página */
@@ -983,36 +975,6 @@
         }
         requestAnimationFrame(syncDynLines);
 
-        // Tarjetas con posición guardada a mano (panel.tarjeta, puesta desde la
-        // Vista Previa 3D del editor): se colocan directo ahí en vez de calcularla.
-        // "top"/"left" son el centro exacto que la persona eligió al arrastrarla
-        // (ver .explicit-pos arriba, que centra en los dos ejes). El único ajuste
-        // acá es un límite de seguridad simple para que en un celular angosto no
-        // termine con el centro pegado al borde (el ancho máximo de la tarjeta y
-        // la media query de pantallas chicas ya hacen el resto).
-        function layoutExplicitPopups(overlayEl, items) {
-            if (!items.length) return;
-            const overlayRect = overlayEl.getBoundingClientRect();
-            if (!overlayRect.height) return;
-
-            items.forEach(({ popup, line, top, left }) => {
-                try {
-                    const topPct = Math.min(Math.max(top, 5), 95);
-                    const leftPct = Math.min(Math.max(left, 5), 95);
-                    popup.style.top = topPct + '%';
-                    popup.style.left = leftPct + '%';
-
-                    const popupRect = popup.getBoundingClientRect();
-                    const centerXPct = ((popupRect.left + popupRect.width / 2 - overlayRect.left) / overlayRect.width) * 100;
-                    const centerYPct = ((popupRect.top + popupRect.height / 2 - overlayRect.top) / overlayRect.height) * 100;
-                    if (isFinite(centerXPct)) line.setAttribute('x2', centerXPct + '%');
-                    if (isFinite(centerYPct)) line.setAttribute('y2', centerYPct + '%');
-                } catch (e) {
-                    console.error('No se pudo acomodar una tarjeta con posición manual', e);
-                }
-            });
-        }
-
         // Acomoda las tarjetas una sola vez (no en cada cuadro): mide su alto real
         // y las apila dentro de un rango vertical ya calibrado a ojo para el giro
         // fijo del documento (rotateX 55°/rotateZ -20°/perspective 1200px, igual
@@ -1155,18 +1117,11 @@
 
                 const sideOf = sidePanelesFor(customPaneles);
                 const itemsBySide = { left: [], right: [] };
-                // Puntos con "tarjeta" guardada a mano (desde la Vista Previa del
-                // editor): se acomodan aparte, directo en su posición — no entran
-                // al apilado automático de itemsBySide.
-                const explicitItems = [];
 
                 customPaneles.forEach(panel => {
                   try {
                     const side = sideOf[panel.id];
                     const color = panel.color || '#00f0ff';
-                    const tarjetaTop = panel.tarjeta && parseFloat(panel.tarjeta.top);
-                    const tarjetaLeft = panel.tarjeta && parseFloat(panel.tarjeta.left);
-                    const hasExplicitPos = isFinite(tarjetaTop) && isFinite(tarjetaLeft);
 
                     // El pin vive DENTRO de .dyn-doc (el elemento que se inclina en 3D),
                     // no en la capa plana: así queda pegado al punto correcto de la
@@ -1192,20 +1147,14 @@
                     // para que nunca se salga de la pantalla sin importar qué tan ancha
                     // salga según su contenido. "top" lo pone layoutDynPopups más abajo.
                     const popup = document.createElement('div');
-                    popup.className = hasExplicitPos
-                        ? 'pop-panel dyn-popup explicit-pos'
-                        : `pop-panel dyn-popup side-${side}`;
+                    popup.className = `pop-panel dyn-popup side-${side}`;
                     // El offset (izq/der) ya lo pone el CSS de .side-left/.side-right
                     // (así la media query de pantallas angostas lo puede recortar).
                     popup.style.borderColor = color;
                     popup.style.boxShadow = `0 0 25px ${color}55`;
                     popup.innerHTML = renderPopupContent(panel);
                     overlay.appendChild(popup);
-                    if (hasExplicitPos) {
-                        explicitItems.push({ popup, line, top: tarjetaTop, left: tarjetaLeft });
-                    } else {
-                        itemsBySide[side].push({ popup, line });
-                    }
+                    itemsBySide[side].push({ popup, line });
 
                     panelEls[panel.id] = {
                         activate: () => { pin.classList.add('active'); popup.classList.add('active'); line.classList.add('active'); },
@@ -1219,7 +1168,6 @@
                 });
 
                 layoutDynPopups(overlay, itemsBySide);
-                layoutExplicitPopups(overlay, explicitItems);
             }
 
             function activatePanel(id) {
