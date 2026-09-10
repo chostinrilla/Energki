@@ -109,6 +109,12 @@
             justify-content: center;
             gap: 16px;
             width: 100%;
+            /* Mismo motivo que preserve-3d en .canvas-container (ver su comentario):
+               .canvas-container ya no es hijo DIRECTO de .workspace (que es quien
+               tiene "perspective") — ahora .canvas-row se mete en medio. Sin esto,
+               la inclinación de Vista Previa se aplicaba sin perspectiva (la
+               rotación sin proyección 3D se ve aplastada/deforme, no en 3D). */
+            transform-style: preserve-3d;
         }
 
         .page-peek {
