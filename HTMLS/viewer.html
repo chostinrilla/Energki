@@ -191,7 +191,15 @@
         #dynamic-stage {
             position: absolute;
             top: 50%; left: 50%;
-            width: 85%;
+            /* Antes solo width:85% (relativo al ANCHO de .scene) — en una pantalla
+               "horizontal" pero con poca altura disponible (ventana chaparra, o
+               .scene limitado a 75dvh), esa regla no tenía techo por altura: en un
+               monitor ancho, 85% podía pedir más alto de lo que .scene medía,
+               saliéndose por arriba/abajo y montándose sobre la barra de controles.
+               min(85%, 105dvh) agrega ese segundo techo: 105dvh = 75dvh (el alto de
+               .scene) × 1.4 (el aspect-ratio) — el ancho máximo que, respetando la
+               proporción 1.4:1, todavía cabe en el alto real de .scene. */
+            width: min(85%, 105dvh);
             aspect-ratio: 1.4 / 1;
             transform: translate(-50%, -50%);
             transform-style: preserve-3d;
@@ -1261,17 +1269,12 @@
         // limpia lo que hubiera de la página anterior primero. Se llama la
         // primera vez que se necesita el escenario genérico, y de nuevo cada vez
         // que la reproducción cruza a otra página (ver pageIndexForStep/renderStep).
-        function renderPaginaDinamica(pageIndex) {
-            const pagina = customPaginas[pageIndex];
-            if (!pagina) return;
-            activeDynPageIndex = pageIndex;
-
-            const stage = ensureDynamicStage();
+        // Reconstruye el contenido (imagen + pines + tarjetas + líneas) de UNA
+        // página dentro del escenario dinámico ya existente — separado de
+        // renderPaginaDinamica() para que ese pueda envolver la llamada en un
+        // fundido cuando se trata de un cambio de página real (ver abajo).
+        function buildPaginaDinamicaContent(pagina, stage, dynDoc, overlay, svg) {
             const image = document.getElementById('dynamic-image');
-            const dynDoc = stage.querySelector('.dyn-doc');
-            const overlay = document.getElementById('dyn-overlay');
-            const svg = document.getElementById('dyn-overlay-svg');
-
             if (pagina.canvas && (pagina.canvas.url || pagina.canvas.imageData)) {
                 image.src = pagina.canvas.url || pagina.canvas.imageData;
                 // El stage se queda en su aspect-ratio fijo (1.4:1); ver nota de ensureDynamicStage.
@@ -1364,6 +1367,52 @@
                     layoutExplicitPopups(overlay, explicitItems);
                 });
             }
+        }
+
+        // Token para descartar un fundido en camino si se pide OTRA página antes
+        // de que termine (ej. alguien le da "Adelantar" varias veces seguidas) —
+        // sin esto, dos cambios de página seguidos podían pisarse a medio fundido.
+        let dynSwapToken = 0;
+
+        function renderPaginaDinamica(pageIndex) {
+            const pagina = customPaginas[pageIndex];
+            if (!pagina) return;
+            // Ya había una página distinta construida (no la primera vez que se
+            // arma el escenario): en vez de reemplazar la imagen/pines/tarjetas de
+            // golpe (ya inclinados, se sentía como un salto brusco), se funden a
+            // negro un instante, se reconstruye todo por dentro, y se vuelve a
+            // fundir hacia arriba — igual de simple, pero ya no se ve como un
+            // "parpadeo" de la imagen.
+            const isPageSwitch = activeDynPageIndex !== -1 && activeDynPageIndex !== pageIndex;
+            activeDynPageIndex = pageIndex;
+
+            const stage = ensureDynamicStage();
+            const dynDoc = stage.querySelector('.dyn-doc');
+            const overlay = document.getElementById('dyn-overlay');
+            const svg = document.getElementById('dyn-overlay-svg');
+
+            if (!isPageSwitch) {
+                buildPaginaDinamicaContent(pagina, stage, dynDoc, overlay, svg);
+                return;
+            }
+
+            // Se funden la IMAGEN y la capa de pines/tarjetas — NO .dyn-doc (el
+            // contenedor que se inclina): ese ya tiene su propia transición de
+            // "transform" a 2s (transition: all ...) para el giro 3D; ponerle
+            // también una de opacity aquí pisaría esa regla y dejaría de animar el
+            // giro la próxima vez que se active/desactive is-3d.
+            const image = document.getElementById('dynamic-image');
+            const myToken = ++dynSwapToken;
+            const FADE_MS = 280;
+            [image, overlay, svg].forEach(el => {
+                el.style.transition = `opacity ${FADE_MS}ms ease`;
+                el.style.opacity = '0';
+            });
+            setTimeout(() => {
+                if (myToken !== dynSwapToken) return; // se pidió otra página mientras tanto
+                buildPaginaDinamicaContent(pagina, stage, dynDoc, overlay, svg);
+                [image, overlay, svg].forEach(el => { el.style.opacity = '1'; });
+            }, FADE_MS);
         }
 
         function applyEditorData(data) {

@@ -180,7 +180,14 @@
                × #dynamic-stage width:85% = 1020px): perspective/translateZ son valores
                fijos en px, así que si la caja mide distinto, la MISMA inclinación se ve
                distinta (más o menos exagerada). Igualando el tamaño, se ve igual. */
-            width: 85%;
+            /* min(...) agrega un techo por ALTURA además del de ancho: sin esto,
+               en una ventana "horizontal" pero baja (poca altura disponible), el
+               85%/1020px de ancho podía pedir más alto (÷1.4) del que en realidad
+               cabía en .workspace, desbordándose sobre el título/botones de arriba
+               o saliéndose por abajo. calc(100dvh - 100px) aproxima el alto
+               disponible real (ventana completa menos el padding de .workspace y
+               el espacio visual del título/indicador de página arriba). */
+            width: min(85%, calc((100dvh - 100px) * 1.4));
             max-width: 1020px;
             aspect-ratio: 1.4 / 1;
             /* flex-shrink:0 — desde que .canvas-container vive dentro de
@@ -1073,7 +1080,18 @@
         const TILT_REF_PERSPECTIVE = 1200;
         const TILT_REF_TRANSLATE_Z = 15;
         function getViewerReferenceWidth() {
-            return Math.min(window.innerWidth, 1200) * 0.85;
+            // Misma fórmula que usa #dynamic-stage en viewer.html (width: min(85%,
+            // 105dvh)): el ancho real del escenario del reproductor está limitado
+            // por lo que quepa tanto a lo ancho (.scene, hasta 1200px) como a lo
+            // alto (.scene mide 75dvh, y 105dvh = 75dvh × 1.4 es el ancho máximo que
+            // cabe ahí respetando el aspect-ratio 1.4:1) — en una ventana "horizontal"
+            // pero baja de altura, el segundo límite manda. Sin este segundo techo
+            // aquí también, la Vista Previa calibraba la inclinación como si el
+            // reproductor fuera a tener más espacio del que realmente tendría en
+            // pantallas así, y se desalineaba.
+            const widthCap = Math.min(window.innerWidth, 1200) * 0.85;
+            const heightCap = window.innerHeight * 1.05;
+            return Math.min(widthCap, heightCap);
         }
         function applyPreviewTiltScale() {
             const actualWidth = canvasContainer.getBoundingClientRect().width;
