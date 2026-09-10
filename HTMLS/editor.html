@@ -163,9 +163,30 @@
            sobre la imagen inclinada, y cambiar de página ahí no está contemplado
            (arrastrar tarjetas ya usa esa vista). */
         .workspace:has(.canvas-container.preview-mode) .page-peek,
-        .workspace:has(.canvas-container.preview-mode) .page-indicator {
+        .workspace:has(.canvas-container.preview-mode) .page-indicator,
+        .workspace:has(.canvas-container.preview-mode) .delete-image-btn {
             display: none;
         }
+
+        /* peek-next-col: apila el peek de "página siguiente" y el botón de
+           borrar en columna, para que el botón quede FUERA de la imagen (no
+           estorba al poner puntos) pero visualmente pegado justo abajo del
+           >/+. flex-shrink:0 por la misma razón que .canvas-container (ver su
+           comentario): que el navegador no los encoja para hacerle lugar a
+           nada. */
+        .peek-next-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .delete-image-btn {
+            background: rgba(10, 15, 25, 0.85);
+            border: 1px solid rgba(255, 85, 102, 0.4);
+        }
+        .delete-image-btn:hover { background: rgba(255, 85, 102, 0.18); }
+        .delete-image-btn[hidden] { display: none; }
 
         @media (max-width: 900px) {
             .page-peek { width: 40px; height: 36vh; }
@@ -198,14 +219,14 @@
                Con esto se queda siempre en su 85%/1020px fijo, sin importar los
                peeks. */
             flex-shrink: 0;
-            background: #111;
+            /* SIN fondo propio a propósito (antes tenía background:#111 aquí) —
+               ver la nota grande en .canvas-tilt de abajo, que explica por qué
+               eso causaba el lienzo negro feo durante la Vista Previa. El
+               "vacío" (antes de subir una imagen) ya lo cubre .canvas-tilt, que
+               SIEMPRE tiene su propio fondo oscuro. */
             border: 2px dashed rgba(0, 240, 255, 0.3);
             border-radius: 8px;
-            /* Mismo tiempo que la inclinación de .canvas-tilt (2s): si no, al
-               salir de Vista Previa este fondo/borde reaparecía de golpe mientras
-               la imagen todavía tardaba en regresar a plano, y se veía como si el
-               lienzo negro "cortara" la imagen a medio camino. */
-            transition: background 2s ease, border-color 2s ease;
+            transition: border-color 2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -230,24 +251,30 @@
             transform-style: preserve-3d;
             transition: transform 2s cubic-bezier(0.25, 1, 0.5, 1);
             transform: rotateX(0deg) rotateZ(0deg) translateZ(0px);
+            /* Fondo PERMANENTE (no solo en preview-mode) — igual que .dyn-doc del
+               reproductor. Antes este fondo solo existía dentro de la regla
+               .preview-mode, mientras que .canvas-container (el marco plano) tenía
+               el suyo propio con su propia transición (2s ease) para desvanecerse.
+               Dos fondos negros independientes, cada uno con su propio timing/curva
+               de animación (esta transición usa cubic-bezier, la de arriba usaba
+               ease), nunca quedan perfectamente sincronizados — por eso se veía un
+               "destello" de lienzo negro plano asomándose por las esquinas mientras
+               la imagen ya iba a medio giro. Con un solo fondo, pegado al elemento
+               que se inclina, ya no hay nada que sincronizar: el fondo se mueve
+               exactamente con la imagen, en todo momento. */
+            background: #111;
+            border-radius: 4px;
+            overflow: hidden;
         }
         .canvas-container.preview-mode .canvas-tilt {
             /* --tilt-z la pone applyPreviewTiltScale(), proporcional al tamaño real
                de la caja (15px es solo el valor de respaldo antes de que corra el JS). */
             transform: rotateX(55deg) rotateZ(-20deg) translateZ(var(--tilt-z, 15px));
-            /* Marco propio (igual que .dyn-doc del reproductor): .canvas-tilt es lo
-               único que se inclina, pero .canvas-container (el fondo negro con
-               borde punteado, pensado para el modo plano normal) se queda plano —
-               por eso se veía como una hoja negra atravesada por la imagen
-               inclinada. Aquí se le da su propio fondo/sombra, y abajo se apaga
-               el de canvas-container mientras dure la Vista Previa. */
-            background: #111;
-            border-radius: 4px;
-            overflow: hidden;
+            /* La sombra solo se ve bien inclinada (con la imagen plana se notaría
+               como un recuadro raro), así que esta sigue siendo condicional. */
             box-shadow: -30px 40px 50px rgba(0,0,0,0.9);
         }
         .canvas-container.preview-mode {
-            background: transparent;
             border-color: transparent;
         }
 
@@ -279,8 +306,8 @@
             border-radius: 6px;
             display: none;
             /* Igual que #dynamic-image en el reproductor: si la imagen real no es
-               exactamente 1.4:1, "contain" deja franjas — sin esto se veía el
-               fondo negro de .canvas-container detrás, que se notaba feo inclinado. */
+               exactamente 1.4:1, "contain" deja franjas — sin esto se vería el
+               fondo negro de .canvas-tilt detrás, que se notaría feo inclinado. */
             background: #fff;
         }
 
@@ -524,7 +551,10 @@
                 <input type="text" id="training-title" placeholder="Ej: Diagrama eléctrico línea 2">
             </div>
             <div class="form-group" style="margin-top: 10px;">
-                <label>Sube la imagen del Manual:</label>
+                <!-- Texto dinámico según la página activa (ver renderPaginaActual) —
+                     para que quede claro cuál imagen se va a reemplazar si hay
+                     varias páginas. -->
+                <label id="upload-image-label">Sube la imagen del Manual:</label>
                 <div class="file-input-row">
                     <label for="image-upload" class="icon-btn" title="Seleccionar archivo" aria-label="Seleccionar archivo"><img src="../images/icon-upload-cy.png" alt=""></label>
                     <span id="file-name-display" class="file-name">Ningún archivo seleccionado</span>
@@ -536,7 +566,11 @@
                 <input type="text" id="instructor-name" placeholder="Ej: Mateo">
             </div>
             <div class="form-group" style="margin-top: 10px;">
-                <label>Objetivo del Curso (opcional):</label>
+                <!-- Texto/valor de este campo cambian según la página activa: en
+                     la página 1 es el "objetivo" del curso; en las demás páginas
+                     es el "contexto" de ESA imagen — mismo campo reutilizado, ver
+                     renderPaginaActual() y el listener de 'input' más abajo. -->
+                <label id="objective-context-label">Objetivo del Curso (opcional):</label>
                 <textarea id="course-objective" rows="2" placeholder="Ej: Desarrollar las habilidades necesarias para interpretar de forma segura este diagrama eléctrico."></textarea>
             </div>
         </div>
@@ -607,6 +641,11 @@
         <!-- Guardado -->
         <div>
             <h3>4. Guardar y Reproducir</h3>
+            <!-- Estimado, no exacto: la voz real varía según el navegador/motor de
+                 síntesis (ver updateDurationEstimate). Se recalcula solo con cada
+                 cambio relevante (narrativa, objetivo/contexto, agregar/quitar
+                 puntos, cambiar de página). -->
+            <p id="duration-estimate" style="color: #888; font-size: 13px; margin: 0 0 10px;">Duración estimada: —</p>
             <div class="btn-row">
                 <button class="btn btn-secondary" onclick="guardarManual()">Guardar Manual</button>
                 <button class="icon-btn" id="btn-ver-reproductor" onclick="verEnReproductor()" title="Ver reproductor" aria-label="Ver reproductor"><img src="../images/icon-play-cy.png" alt=""></button>
@@ -646,9 +685,18 @@
                 </div>
             </div>
 
-            <div class="page-peek page-peek-right disabled" id="peek-next" title="Página siguiente" onclick="handlePageNextClick()">
-                <img class="peek-img" id="peek-next-img" alt="">
-                <div class="peek-arrow" id="peek-next-arrow">&rsaquo;</div>
+            <!-- Envuelve el peek-next + el botón de borrar, para que el botón
+                 quede AFUERA de la imagen (no estorba al poner puntos cerca de
+                 esa esquina) pero siga viéndose "pegado" abajo del >/+. -->
+            <div class="peek-next-col">
+                <div class="page-peek page-peek-right disabled" id="peek-next" title="Página siguiente" onclick="handlePageNextClick()">
+                    <img class="peek-img" id="peek-next-img" alt="">
+                    <div class="peek-arrow" id="peek-next-arrow">&rsaquo;</div>
+                </div>
+                <!-- Solo visible cuando esta página SÍ tiene imagen (ver
+                     renderPaginaActual) y se oculta en Vista Previa 3D (igual que
+                     los peeks de página, ver su regla :has() en el CSS). -->
+                <button type="button" id="btn-delete-image" class="icon-btn danger delete-image-btn" onclick="borrarImagenPagina()" title="Borrar esta página" aria-label="Borrar esta página" hidden><img src="../images/icon-trash-red.png" alt=""></button>
             </div>
         </div>
 
@@ -733,7 +781,7 @@
                 empresa: "Energki Robotics"
             },
             paginas: [
-                { canvas: null, paneles: [] }
+                { canvas: null, paneles: [], contexto: '' }
             ],
             steps: []
         };
@@ -758,6 +806,11 @@
         // de aquella para la que se eligió cada imagen.
         let pendingImages = {}; // { [pageIndex]: File }
         let pendingImagePreviews = {}; // { [pageIndex]: 'data:...' } — para re-mostrarla si se vuelve a esa página antes de guardar
+        // true mientras se espera a que el usuario elija (o cancele) la imagen
+        // de una página NUEVA (ver handlePageNextClick) — la página en sí no se
+        // crea hasta que de verdad se elige un archivo, para no dejar una hoja
+        // vacía y fea si cancela el selector.
+        let pendingNewPage = false;
         let hasUnsavedChanges = false; // true si hay cambios que "Ver Reproductor" no reflejaría (aún no guardados)
         let hasSavedOnce = false; // true en cuanto existe alguna versión guardada en el servidor
         let formIsDirty = false; // true si el formulario de "Crear/Editar Panel" tiene cambios que no se han confirmado con su propio botón Guardar
@@ -791,6 +844,17 @@
         imageUpload.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
+                // Recién AHORA se crea la página nueva (si este selector se abrió
+                // para eso) — así, si el usuario cancela el selector, nunca llega
+                // a existir una página vacía y fea.
+                if (pendingNewPage) {
+                    manualData.paginas.push({ canvas: null, paneles: [], contexto: '' });
+                    activePageIndex = manualData.paginas.length - 1;
+                    hasUnsavedChanges = true;
+                    renderPaginaActual();
+                }
+                pendingNewPage = false;
+
                 fileNameDisplay.textContent = file.name;
                 const pageIndex = activePageIndex; // fija a la página que estaba activa AL ELEGIR el archivo
                 const reader = new FileReader();
@@ -803,12 +867,32 @@
                     hasUnsavedChanges = true;
                 }
                 reader.readAsDataURL(file);
+            } else {
+                // Rara vez dispara 'change' sin archivo, pero por si acaso: no
+                // dejar pendingNewPage encendido para siempre.
+                pendingNewPage = false;
             }
         });
 
         document.getElementById('training-title').addEventListener('input', () => { hasUnsavedChanges = true; });
-        document.getElementById('instructor-name').addEventListener('input', () => { hasUnsavedChanges = true; });
-        document.getElementById('course-objective').addEventListener('input', () => { hasUnsavedChanges = true; });
+        document.getElementById('instructor-name').addEventListener('input', () => {
+            hasUnsavedChanges = true;
+            manualData.configuracion.instructor = document.getElementById('instructor-name').value;
+            updateDurationEstimate(); // el nombre entra en el texto de bienvenida
+        });
+        // Mismo campo de texto sirve para dos cosas distintas según la página
+        // activa (ver renderPaginaActual): "objetivo" en la página 1, "contexto"
+        // de la imagen en las demás — se guarda en vivo en el destino correcto
+        // para que no se pierda si cambias de página sin haber guardado antes.
+        document.getElementById('course-objective').addEventListener('input', (e) => {
+            if (activePageIndex === 0) {
+                manualData.configuracion.objetivo = e.target.value;
+            } else {
+                currentPagina().contexto = e.target.value;
+            }
+            hasUnsavedChanges = true;
+            updateDurationEstimate();
+        });
 
         function renderExistingMarkers() {
             canvasContainer.querySelectorAll('.existing-marker').forEach(el => el.remove());
@@ -1229,6 +1313,7 @@
         }
 
         function renderPanelList() {
+            updateDurationEstimate(); // se llama aquí porque renderPanelList corre con cada punto agregado/editado/borrado/reordenado
             panelCountEl.textContent = `(${currentPagina().paneles.length})`;
 
             if (!currentPagina().paneles.length) {
@@ -1307,16 +1392,27 @@
         // sincronizar el orden.
         function ensurePanelSteps() {
             if (!Array.isArray(manualData.steps)) manualData.steps = [];
-            const existingIds = new Set(manualData.steps.map(s => s.id));
-            currentPagina().paneles.forEach(p => {
-                const stepId = `step-${p.id}`;
-                if (!existingIds.has(stepId)) {
-                    manualData.steps.push({
-                        id: stepId,
-                        text: p.narrativa || p.resumen || p.titulo || p.id,
-                        panelIds: [p.id]
-                    });
-                }
+            const stepById = new Map(manualData.steps.map(s => [s.id, s]));
+            // De TODAS las páginas, no solo la que esté abierta ahora mismo —
+            // igual que buildAutoSteps(): si se crean/editan puntos en varias
+            // páginas antes de guardar, todas necesitan su paso, no solo la que
+            // se esté viendo al momento de guardar.
+            manualData.paginas.forEach(pagina => {
+                pagina.paneles.forEach(p => {
+                    const stepId = `step-${p.id}`;
+                    const text = p.narrativa || p.resumen || p.titulo || p.id;
+                    const existing = stepById.get(stepId);
+                    if (existing) {
+                        // Mantiene el guion sincronizado con la narrativa ACTUAL
+                        // del punto — antes, una vez creado el paso, su texto
+                        // quedaba congelado para siempre aunque se editara la
+                        // narrativa después (por eso el reproductor seguía
+                        // diciendo el texto viejo).
+                        existing.text = text;
+                    } else {
+                        manualData.steps.push({ id: stepId, text, panelIds: [p.id] });
+                    }
+                });
             });
         }
 
@@ -1457,6 +1553,67 @@
             pageIndicatorEl.textContent = total > 1 ? `Página ${activePageIndex + 1} de ${total}` : '';
         }
 
+        // --- Duración estimada del reproductor ---
+        //
+        // NO es exacta: cuando hay voz, el tiempo real depende del navegador/
+        // motor de síntesis (varía de uno a otro). Es solo una idea para
+        // planear, con la misma lógica de tiempos que usa el reproductor sin
+        // voz: ~70ms por carácter narrado + 1s de pausa después de cada paso,
+        // más el tiempo fijo de cada inclinación/pausa entre imágenes (deben
+        // coincidir con TILT_MS/PAGE_TRANSITION_PAUSE_MS en viewer.html).
+        const DURATION_MS_PER_CHAR = 70;
+        const DURATION_STEP_PAUSE_MS = 1000;
+        const DURATION_TILT_MS = 2000;
+        const DURATION_PAGE_PAUSE_MS = 1800;
+
+        function estimateStepMs(text) {
+            const clean = (text || '').trim();
+            if (!clean) return 400; // paso "vacío": un respiro corto, no cero
+            return clean.length * DURATION_MS_PER_CHAR + DURATION_STEP_PAUSE_MS;
+        }
+
+        function estimateManualDurationMs() {
+            const instructor = manualData.configuracion.instructor || 'Mateo';
+            const objetivo = (manualData.configuracion.objetivo || '').trim();
+
+            let total = 0;
+            total += estimateStepMs(`Hola, les doy la bienvenida. Soy ${instructor}, su instructor virtual en Energki Robotics.`);
+            if (objetivo) total += estimateStepMs(objetivo);
+            total += estimateStepMs('Comencemos con este manual de entrenamiento.');
+
+            manualData.paginas.forEach((pagina, idx) => {
+                if (!pagina.paneles.length) return; // página sin puntos todavía: no aporta tiempo de reproducción real
+
+                const contexto = idx > 0 ? (pagina.contexto || '').trim() : '';
+                if (contexto) {
+                    total += estimateStepMs(contexto) + DURATION_TILT_MS;
+                } else if (idx > 0) {
+                    total += DURATION_PAGE_PAUSE_MS + DURATION_TILT_MS;
+                } else {
+                    total += DURATION_TILT_MS; // página 1: la inclinación llega justo tras "Comencemos"
+                }
+
+                pagina.paneles.forEach(p => {
+                    total += estimateStepMs(p.narrativa || p.resumen || p.titulo || p.id);
+                });
+            });
+
+            return total;
+        }
+
+        function formatDuration(ms) {
+            const totalSeconds = Math.round(ms / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes} min ${String(seconds).padStart(2, '0')} seg`;
+        }
+
+        function updateDurationEstimate() {
+            const el = document.getElementById('duration-estimate');
+            if (!el) return;
+            el.textContent = `Duración estimada: ~${formatDuration(estimateManualDurationMs())} (aprox., varía con la voz real)`;
+        }
+
         // Repinta TODO lo que depende de la página activa: imagen, puntos sobre la
         // imagen, lista de puntos, y los botones de navegación. Se usa tanto al
         // cargar un manual como al cambiar de página con los botones </>/+.
@@ -1464,6 +1621,12 @@
             cancelEditPanel(); // ya no aplica seguir "editando" un punto de otra página; de paso repinta puntos+lista
 
             const pagina = currentPagina();
+            // Deja claro cuál imagen se va a reemplazar si hay varias páginas —
+            // en la página 1 se queda igual que siempre (para no cambiar nada si
+            // el manual es de una sola imagen).
+            document.getElementById('upload-image-label').textContent = manualData.paginas.length > 1
+                ? `Sube la imagen ${activePageIndex + 1} del Manual:`
+                : 'Sube la imagen del Manual:';
             // Si hay una imagen elegida pero aún no subida para ESTA página
             // (pendingImagePreviews), se muestra esa — si no, la ya guardada.
             const pendingUrl = pendingImagePreviews[activePageIndex];
@@ -1479,9 +1642,102 @@
                 previewImg.style.display = 'none';
                 placeholderText.style.display = 'block';
             }
+            document.getElementById('btn-delete-image').hidden = !imgUrl;
             fileNameDisplay.textContent = pendingImages[activePageIndex] ? pendingImages[activePageIndex].name : '';
 
+            // El campo de "objetivo"/"contexto" (ver el listener de 'input' de
+            // #course-objective) cambia de destino y de etiqueta según la página.
+            const objectiveContextEl = document.getElementById('course-objective');
+            const objectiveContextLabel = document.getElementById('objective-context-label');
+            if (activePageIndex === 0) {
+                objectiveContextLabel.textContent = 'Objetivo del Curso (opcional):';
+                objectiveContextEl.placeholder = 'Ej: Desarrollar las habilidades necesarias para interpretar de forma segura este diagrama eléctrico.';
+                objectiveContextEl.value = manualData.configuracion.objetivo || '';
+            } else {
+                objectiveContextLabel.textContent = 'Contexto de esta Imagen (opcional):';
+                objectiveContextEl.placeholder = 'Ej: Ahora veremos el diagrama de control de motores.';
+                objectiveContextEl.value = pagina.contexto || '';
+            }
+
             updatePeeks();
+            updateDurationEstimate();
+        }
+
+        // Borra la imagen de la página activa (no la página en sí, ni sus
+        // puntos) — por si ya no la quieres. Igual que reemplazarla, esto no
+        // limpia el archivo viejo en Drive (ese mismo comportamiento ya existía
+        // al reemplazar una imagen), solo quita la referencia de este manual.
+        // Borra la página completa (imagen + sus puntos) — no solo la imagen:
+        // una página sin imagen se veía fea (espacio vacío), así que en vez de
+        // dejarla así se quita entera. Excepción: si es la ÚNICA página del
+        // manual no se puede quitar (siempre debe quedar al menos una) — ahí
+        // solo se le borra la imagen, igual que un manual nuevo antes de subir
+        // la primera.
+        async function borrarImagenPagina() {
+            const pagina = currentPagina();
+            const hasImage = pendingImagePreviews[activePageIndex] || (pagina.canvas && pagina.canvas.url);
+            if (!hasImage) return;
+
+            const isOnlyPage = manualData.paginas.length === 1;
+            const pointCount = pagina.paneles.length;
+            const pointsWarning = pointCount ? ` (junto con ${pointCount} punto${pointCount === 1 ? '' : 's'} que tiene)` : '';
+            const message = isOnlyPage
+                ? `¿Borrar la imagen de esta página${pointsWarning}? Es la única página del manual, así que no se puede quitar por completo — se queda vacía, como un manual nuevo antes de subir su primera imagen. Esto no se puede deshacer.`
+                : `¿Borrar esta página completa${pointsWarning}? Esto no se puede deshacer.`;
+
+            const confirmed = await appConfirm(message, 'Borrar', 'Cancelar');
+            if (!confirmed) return;
+
+            if (isOnlyPage) {
+                pagina.canvas = null;
+                pagina.paneles = [];
+                delete pendingImages[activePageIndex];
+                delete pendingImagePreviews[activePageIndex];
+            } else {
+                eliminarPaginaCompleta(activePageIndex);
+            }
+            hasUnsavedChanges = true;
+            renderPaginaActual();
+        }
+
+        // Quita la página "idx" del arreglo y limpia todo lo que dependía de su
+        // índice: el guion (steps) de sus puntos y su "contexto" (que, al
+        // borrarse la página, quedarían narrando algo sin ninguna imagen a la
+        // que pertenecer), y las páginas DESPUÉS de esta se recorren un lugar
+        // (su "contexto"/pageFlat estaba anclado a su índice viejo).
+        function eliminarPaginaCompleta(idx) {
+            const pagina = manualData.paginas[idx];
+
+            const stepIdsToRemove = new Set(pagina.paneles.map(p => `step-${p.id}`));
+            stepIdsToRemove.add(`pagina-contexto-${idx}`);
+            manualData.steps = (manualData.steps || []).filter(s => !stepIdsToRemove.has(s.id));
+
+            // Las páginas después de "idx" se recorren un lugar — su paso de
+            // contexto (si tiene) debe seguir apuntando a la página correcta.
+            manualData.steps.forEach(s => {
+                if (typeof s.pageFlat === 'number' && s.pageFlat > idx) {
+                    s.pageFlat -= 1;
+                    s.id = `pagina-contexto-${s.pageFlat}`;
+                }
+            });
+            manualData.steps.forEach((s, i) => { s.order = i + 1; });
+
+            // Imágenes elegidas pero aún no subidas (de páginas DESPUÉS de esta)
+            // también se recorren, para seguir apuntando a la página correcta.
+            const reindex = (map) => {
+                const next = {};
+                Object.keys(map).forEach(key => {
+                    const i = Number(key);
+                    if (i === idx) return;
+                    next[i > idx ? i - 1 : i] = map[i];
+                });
+                return next;
+            };
+            pendingImages = reindex(pendingImages);
+            pendingImagePreviews = reindex(pendingImagePreviews);
+
+            manualData.paginas.splice(idx, 1);
+            activePageIndex = Math.min(idx, manualData.paginas.length - 1);
         }
 
         // Si hay algo sin confirmar en el punto que se está editando, avisa antes
@@ -1508,11 +1764,25 @@
             if (!ok) return;
 
             if (isLast) {
-                manualData.paginas.push({ canvas: null, paneles: [] });
-                activePageIndex = manualData.paginas.length - 1;
-                hasUnsavedChanges = true;
-                renderPaginaActual();
-                imageUpload.click(); // abre el selector de archivo de inmediato: el botón "sirve para añadir una imagen"
+                // La página en sí NO se crea aquí — solo cuando de verdad se
+                // elige un archivo (ver el listener de 'change' de imageUpload).
+                // Si cancelas el selector, no pasa nada: nunca llega a existir
+                // una página vacía y fea sin imagen.
+                pendingNewPage = true;
+                imageUpload.value = ''; // para que 'change' SÍ dispare aunque elijas el mismo archivo de antes
+                imageUpload.click();
+                // La mayoría de navegadores regresan el foco a la ventana en
+                // cuanto el selector se cierra, elijas algo o canceles — se usa
+                // eso para notar la cancelación (que no dispara 'change') y
+                // apagar pendingNewPage; si de casualidad no aplica en algún
+                // navegador, el peor caso es que quede pendiente sin más efecto
+                // (la página solo se crea cuando SÍ se elige un archivo).
+                window.addEventListener('focus', function onFocusAfterPicker() {
+                    window.removeEventListener('focus', onFocusAfterPicker);
+                    setTimeout(() => {
+                        if (pendingNewPage && !imageUpload.files.length) pendingNewPage = false;
+                    }, 300);
+                });
             } else {
                 activePageIndex++;
                 renderPaginaActual();
@@ -1552,7 +1822,7 @@
                 // ve y edita exactamente igual que antes, como su única página.
                 manualData.paginas = (Array.isArray(data.paginas) && data.paginas.length)
                     ? data.paginas
-                    : [{ canvas: data.canvas || null, paneles: data.paneles || [] }];
+                    : [{ canvas: data.canvas || null, paneles: data.paneles || [], contexto: '' }];
                 activePageIndex = 0;
                 manualData.steps = data.steps || []; // se preservan tal cual para no perder narraciones ya guardadas
 
@@ -1799,21 +2069,75 @@
                 { id: 'intro-1', text: `Hola, les doy la bienvenida. Soy ${instructor}, su instructor virtual en Energki Robotics.`, panelIds: ['intro-splash'] }
             ];
             if (objetivo) {
-                intro.push({ id: 'intro-objetivo', text: objetivo, panelIds: ['intro-splash'] });
+                // 'portada-3d' (no 'intro-splash'): quita el logo y ya muestra el
+                // documento plano desde que empieza a narrarse el objetivo, no
+                // hasta después — así lo pidieron: "cuando se dice el objetivo que
+                // aparezca la imagen en 2D... sin el logo, eso ya debió salir".
+                intro.push({ id: 'intro-objetivo', text: objetivo, panelIds: ['portada-3d'] });
             }
             intro.push({ id: 'intro-2', text: 'Comencemos con este manual de entrenamiento.', panelIds: ['portada-3d'] });
 
             // De TODAS las páginas en orden (no solo la activa): así el guion
             // narra completa la página 1 antes de mencionar cualquier punto de la
             // página 2, sin necesitar lógica aparte para eso — es el mismo efecto
-            // que ya se busca en el reproductor.
-            const panelSteps = manualData.paginas.flatMap(pagina => pagina.paneles).map(p => ({
-                id: `step-${p.id}`,
-                text: p.narrativa || p.resumen || p.titulo || p.id,
-                panelIds: [p.id]
-            }));
+            // que ya se busca en el reproductor. Antes de los puntos de cada
+            // página (salvo la 1, que ya tiene su "objetivo" arriba) va su
+            // "contexto" si tiene uno: un paso plano (pageFlat) que se narra con
+            // la imagen sin inclinar, igual que el objetivo pero por página.
+            const pageSteps = [];
+            manualData.paginas.forEach((pagina, idx) => {
+                const contexto = idx > 0 ? (pagina.contexto || '').trim() : '';
+                if (contexto) {
+                    pageSteps.push({ id: `pagina-contexto-${idx}`, text: contexto, panelIds: [], pageFlat: idx });
+                }
+                pagina.paneles.forEach(p => {
+                    pageSteps.push({
+                        id: `step-${p.id}`,
+                        text: p.narrativa || p.resumen || p.titulo || p.id,
+                        panelIds: [p.id]
+                    });
+                });
+            });
 
-            return intro.concat(panelSteps).map((step, i) => ({ ...step, order: i + 1 }));
+            return intro.concat(pageSteps).map((step, i) => ({ ...step, order: i + 1 }));
+        }
+
+        // Igual que ensureObjectiveStep, pero un "contexto" por página (2 en
+        // adelante) en vez de un solo objetivo global: si la página tiene texto
+        // de contexto, se inserta/actualiza un paso PLANO (pageFlat) justo antes
+        // de su primer punto — se narra con la imagen sin inclinar, tal como el
+        // objetivo de la página 1, y luego sí se inclina para sus puntos. Si el
+        // contexto queda vacío, se quita ese paso (la página entra directo
+        // inclinada, con la pausa fija de siempre).
+        function ensurePaginaContextSteps() {
+            manualData.paginas.forEach((pagina, idx) => {
+                if (idx === 0) return; // la página 1 usa "objetivo" (ensureObjectiveStep)
+                const stepId = `pagina-contexto-${idx}`;
+                const contexto = (pagina.contexto || '').trim();
+                const existingIdx = manualData.steps.findIndex(s => s.id === stepId);
+
+                if (!contexto) {
+                    if (existingIdx !== -1) manualData.steps.splice(existingIdx, 1);
+                    return;
+                }
+
+                if (existingIdx !== -1) {
+                    manualData.steps[existingIdx].text = contexto;
+                    return;
+                }
+
+                // Se inserta justo antes del primer paso de ESTA página (si ya
+                // tiene alguno) — si todavía no tiene ningún punto, se agrega al
+                // final, y se reacomoda solo la próxima vez que se guarde en
+                // cuanto tenga uno (este mismo bloque).
+                const firstPanelId = pagina.paneles[0] && pagina.paneles[0].id;
+                const firstStepIdx = firstPanelId
+                    ? manualData.steps.findIndex(s => (s.panelIds || []).includes(firstPanelId))
+                    : -1;
+                const insertAt = firstStepIdx !== -1 ? firstStepIdx : manualData.steps.length;
+                manualData.steps.splice(insertAt, 0, { id: stepId, text: contexto, panelIds: [], pageFlat: idx });
+            });
+            manualData.steps.forEach((s, i) => { s.order = i + 1; });
         }
 
         // Para un manual ya existente no se reconstruye todo el guion (se respetan
@@ -1830,13 +2154,31 @@
 
             if (existing) {
                 existing.text = objetivo;
+                // Migra manuales guardados antes de este cambio: antes quitaba el
+                // logo hasta el paso SIGUIENTE ("Comencemos..."), ahora lo quita
+                // desde que arranca a narrarse el objetivo (ver buildAutoSteps).
+                existing.panelIds = ['portada-3d'];
                 return;
             }
 
             // Se inserta justo después del primer paso (la bienvenida), antes de la portada.
             const insertAt = manualData.steps.length ? 1 : 0;
-            manualData.steps.splice(insertAt, 0, { id: 'intro-objetivo', text: objetivo, panelIds: ['intro-splash'] });
+            manualData.steps.splice(insertAt, 0, { id: 'intro-objetivo', text: objetivo, panelIds: ['portada-3d'] });
             manualData.steps.forEach((s, i) => { s.order = i + 1; });
+        }
+
+        // Mismo problema que ensureObjectiveStep: el paso "intro-1" (la
+        // bienvenida) trae el nombre del instructor HORNEADO en su texto desde
+        // que se creó (buildAutoSteps, solo corre una vez, al guardar por primera
+        // vez) — si después se cambia el nombre del instructor, ese paso ya
+        // existente nunca se actualizaba solo, y el reproductor seguía diciendo
+        // el nombre viejo para siempre.
+        function ensureIntroText() {
+            const instructor = manualData.configuracion.instructor || 'Mateo';
+            const intro1 = manualData.steps.find(s => s.id === 'intro-1');
+            if (intro1) {
+                intro1.text = `Hola, les doy la bienvenida. Soy ${instructor}, su instructor virtual en Energki Robotics.`;
+            }
         }
 
         async function guardarManual() {
@@ -1861,14 +2203,26 @@
             }
 
             manualData.configuracion.instructor = document.getElementById('instructor-name').value;
-            manualData.configuracion.objetivo = document.getElementById('course-objective').value.trim();
+            // El campo de texto de arriba es "objetivo" solo en la página 1 — en
+            // las demás es el "contexto" de esa página (ver renderPaginaActual/el
+            // listener de 'input'). Guardar siempre en manualData.configuracion.objetivo
+            // aquí le pisaría el objetivo real con el contexto de la página que
+            // estuvieras viendo al momento de guardar.
+            const objectiveContextValue = document.getElementById('course-objective').value.trim();
+            if (activePageIndex === 0) {
+                manualData.configuracion.objetivo = objectiveContextValue;
+            } else {
+                currentPagina().contexto = objectiveContextValue;
+            }
 
             if (!isEditingExisting) {
                 manualData.steps = buildAutoSteps();
             } else {
                 ensurePanelSteps();
+                ensurePaginaContextSteps();
                 syncStepOrderToPaneles();
                 ensureObjectiveStep();
+                ensureIntroText();
             }
 
             sendStatus.textContent = 'Guardando...';

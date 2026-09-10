@@ -80,32 +80,10 @@
 
         #intro-splash p { margin: 0; font-size: 20px; color: #aaa; letter-spacing: 2px; text-transform: uppercase;}
 
-        .svg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+        /* .dashed-line: la reutilizan las líneas del escenario genérico (ver
+           renderPaginaDinamica más abajo), no solo esta demo — no se borra. */
         .dashed-line { stroke-dasharray: 8 8; stroke-dashoffset: 500; transition: stroke-dashoffset 1s ease-out, opacity 0.3s; opacity: 0; }
         .dashed-line.active { stroke-dashoffset: 0; opacity: 1; }
-
-        .document-base {
-            position: absolute;
-            width: 85%;
-            aspect-ratio: 1.4 / 1;
-            background-color: #fff;
-            background-image: url('portada.png'); 
-            background-size: cover;
-            background-position: center;
-            border-radius: 4px;
-            box-shadow: 0 0 30px rgba(0,0,0,0.8);
-            transition: all 2s cubic-bezier(0.25, 1, 0.5, 1);
-            transform: rotateX(0deg) rotateZ(0deg) translateZ(0px);
-            z-index: 10; 
-        }
-
-        .scene.splash-active .document-base { filter: brightness(0.2) blur(5px); }
-
-        .scene.is-3d .document-base {
-            transform: rotateX(55deg) rotateZ(-20deg) translateZ(15px);
-            box-shadow: -30px 40px 50px rgba(0,0,0,0.9);
-            filter: brightness(0.85) blur(0px); 
-        }
 
         /* --- CLASE BASE PANELES --- */
         .pop-panel {
@@ -138,46 +116,6 @@
         .campo-swatch { width: 13px; height: 13px; border-radius: 3px; margin-top: 3px; border: 1px solid rgba(255,255,255,0.3); flex-shrink: 0; }
         .campo-row b { color: #fff; }
 
-        /* --- PANELES (Animaciones) --- */
-        #panel-fabricante { border-color: #ffaa00; box-shadow: 0 0 25px rgba(255, 170, 0, 0.3); }
-        #panel-fabricante h3 { color: #ffaa00; }
-        #panel-fabricante.active { animation: animFab 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-        @keyframes animFab { 0% { top: 42%; left: 18%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 42%; left: 18%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 25%; left: 8%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(150px); } }
-
-        #panel-cliente { border-color: #00ff88; box-shadow: 0 0 25px rgba(0, 255, 136, 0.3); }
-        #panel-cliente h3 { color: #00ff88; }
-        #panel-cliente.active { animation: animCli 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-        @keyframes animCli { 0% { top: 48%; left: 32%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 48%; left: 32%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 15%; left: 28%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(100px); } }
-        
-        #panel-proyecto { border-color: #b000ff; box-shadow: 0 0 25px rgba(176, 0, 255, 0.3); width: 260px;}
-        #panel-proyecto h3 { color: #b000ff; }
-        #panel-proyecto p { font-size: 16px; }
-        #panel-proyecto.active { animation: animProy 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-        @keyframes animProy { 0% { top: 58%; left: 38%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 58%; left: 38%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 10%; left: 55%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(120px); } }
-
-        #panel-identificacion { border-color: #00aaff; box-shadow: 0 0 25px rgba(0, 170, 255, 0.3); width: 300px; padding: 10px 20px;}
-        #panel-identificacion h3 { color: #00aaff; margin-bottom: 5px;}
-        #panel-identificacion.active { animation: animIden 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-        @keyframes animIden { 0% { top: 40%; left: 62%; opacity: 0; transform: translate(-50%, -50%) scale(0.1); } 40% { top: 40%; left: 62%; opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { top: 25%; left: 85%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(150px); } }
-
-        #panel-tecnico { border-color: #ff0055; box-shadow: 0 0 25px rgba(255, 0, 85, 0.3); width: 350px; padding: 10px 20px; }
-        #panel-tecnico h3 { color: #ff0055; margin-bottom: 5px;}
-        #panel-tecnico.active { animation: animTec 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-        @keyframes animTec { 0% { top: 68%; left: 28%; opacity: 0; transform: translate(-50%, -50%) scale(0.1) translateZ(0px); } 40% { top: 68%; left: 28%; opacity: 1; transform: translate(-50%, -50%) scale(1.1) translateZ(100px); } 100% { top: 55%; left: 8%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(300px); } }
-
-        #panel-colores { border-color: #ccff00; box-shadow: 0 0 25px rgba(204, 255, 0, 0.3); width: 380px; padding: 10px 20px; }
-        #panel-colores h3 { color: #ccff00; margin-bottom: 10px;}
-        .color-row { display: flex; align-items: center; margin-bottom: 4px; font-size: 14px; color: #fff;}
-        .color-box { width: 14px; height: 14px; border-radius: 3px; margin-right: 10px; border: 1px solid rgba(255,255,255,0.3); flex-shrink: 0;}
-        .cb-black { background: #000; }
-        .cb-green { background: linear-gradient(135deg, #00ff00 50%, #ffff00 50%); }
-        .cb-orange { background: #ff8800; }
-        .cb-red { background: #ff0000; }
-        .cb-white { background: #fff; border: 1px solid #666;}
-        .cb-blue { background: #0000aa; }
-        .cb-whiteblue { background: linear-gradient(135deg, #fff 50%, #0000aa 50%); border: 1px solid #666;}
-        #panel-colores.active { animation: animColores 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-        @keyframes animColores { 0% { top: 70%; left: 75%; opacity: 0; transform: translate(-50%, -50%) scale(0.1) translateZ(0px); } 40% { top: 70%; left: 75%; opacity: 1; transform: translate(-50%, -50%) scale(1.1) translateZ(100px); } 100% { top: 60%; left: 82%; opacity: 1; transform: translate(-50%, -50%) scale(1) translateZ(300px); } }
 
         /* --- PANELES DINÁMICOS (recibidos desde el editor) --- */
         .scene.dynamic-active .document-base,
@@ -212,8 +150,8 @@
                compense ese corrimiento, así que se veía cortado). */
             transition: opacity 0.6s ease, transform 2s cubic-bezier(0.25, 1, 0.5, 1);
         }
-        /* Igual que .document-base: visible desde el inicio (plano, 2D), no aparece
-           de golpe. Lo único que cambia al llegar a "portada" (is-3d) es el giro. */
+        /* Visible desde el inicio (plano, 2D), no aparece de golpe. Lo único que
+           cambia al llegar a "portada" (is-3d) es el giro. */
         .scene.dynamic-active #dynamic-stage { opacity: 1; }
         /* Paneo de cámara (44% en X), calibrado a ojo contra el editor: mueve TODO
            el conjunto en bloque (marco plano + imagen inclinada + pines + tarjetas,
@@ -237,7 +175,7 @@
         }
         #dynamic-overlay-root.is-visible { opacity: 1; }
 
-        /* Base que se inclina, igual que .document-base en la demo original */
+        /* Base que se inclina en 3D */
         .dyn-doc {
             position: absolute;
             inset: 0;
@@ -254,8 +192,8 @@
                el giro se veía torcido/descuadrado a medio camino. */
             transform: translateX(0%) translateY(0%) rotateX(0deg) rotateZ(0deg) translateZ(0px);
         }
-        /* Igual que .scene.splash-active .document-base: plana y atenuada durante
-           la bienvenida, para que no compita visualmente con el modal. */
+        /* Plana y atenuada durante la bienvenida, para que no compita
+           visualmente con el modal de la intro. */
         .scene.splash-active .dyn-doc { filter: brightness(0.2) blur(5px); }
 
         .scene.dynamic-active.is-3d .dyn-doc {
@@ -389,81 +327,6 @@
             <p>Capacitación Técnica</p>
         </div>
 
-        <svg class="svg-overlay">
-            <line id="line-fab" x1="18%" y1="42%" x2="8%" y2="25%" stroke="#ffaa00" stroke-width="2" class="dashed-line" />
-            <line id="line-cli" x1="32%" y1="48%" x2="28%" y2="15%" stroke="#00ff88" stroke-width="2" class="dashed-line" />
-            <line id="line-proy" x1="38%" y1="58%" x2="55%" y2="10%" stroke="#b000ff" stroke-width="2" class="dashed-line" />
-            <line id="line-iden" x1="62%" y1="40%" x2="85%" y2="25%" stroke="#00aaff" stroke-width="2" class="dashed-line" />
-            <line id="line-tec" x1="28%" y1="68%" x2="8%" y2="55%" stroke="#ff0055" stroke-width="2" class="dashed-line" />
-            <line id="line-colores" x1="75%" y1="70%" x2="82%" y2="60%" stroke="#ccff00" stroke-width="2" class="dashed-line" />
-        </svg>
-
-        <div class="document-base" id="doc"></div>
-
-        <div class="pop-panel" id="panel-fabricante">
-            <h3>Fabricante</h3>
-            <p>Clevertech S.p.A.</p>
-        </div>
-
-        <div class="pop-panel" id="panel-cliente">
-            <h3>Cliente Final</h3>
-            <p>Nestlé Purina Hartwell</p>
-        </div>
-        
-        <div class="pop-panel" id="panel-proyecto">
-            <h3>Descripción del Proyecto</h3>
-            <p>PALLETIZER/DEPALLETIZER CAPTIVE 3OZ LINE 1</p>
-        </div>
-
-        <div class="pop-panel" id="panel-identificacion">
-            <h3>Identificación del Equipo</h3>
-            <div class="data-grid">
-                <div>Serial Number</div><div>PRJ230029</div>
-                <div>Machine</div><div>P02546-CP1</div>
-                <div>Electric Diagram N°</div><div>PRJ230029_P02546-CP1</div>
-            </div>
-        </div>
-
-        <div class="pop-panel" id="panel-tecnico">
-            <h3>Datos de Alimentación</h3>
-            <div class="data-grid">
-                <div>Potencia Nominal</div><div>98 KW</div>
-                <div>Corriente Nominal</div><div>118 A</div>
-                <div>Frecuencia</div><div>60 Hz</div>
-                <div>Voltaje de Operación</div><div>480 V</div>
-                <div>Tensión Auxiliar</div><div>24 VDC</div>
-                <div>Corriente Corto Circuito</div><div>65 KA</div>
-                <div>Normativa de Referencia</div><div>UL + STICKER</div>
-            </div>
-        </div>
-
-        <div class="pop-panel" id="panel-colores">
-            <h3>Código de Colores (Cableado)</h3>
-            <div class="color-row">
-                <div class="color-box cb-black"></div> <b>L1, L2, L3:</b>&nbsp; Potencia Principal (220V/380V/480V)
-            </div>
-            <div class="color-row">
-                <div class="color-box cb-green"></div> <b>PE:</b>&nbsp; Tierra (Yellow/Green)
-            </div>
-            <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 8px 0;"></div>
-            <div class="color-row">
-                <div class="color-box cb-orange"></div> <b style="color:#ff8800;">ALERTA:</b>&nbsp; Energizado aún con Main Switch en OFF
-            </div>
-            <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 8px 0;"></div>
-            <div class="color-row">
-                <div class="color-box cb-red"></div> <b>110 / 220 VAC:</b>&nbsp; Control Corriente Alterna
-            </div>
-            <div class="color-row">
-                <div class="color-box cb-white"></div> <b>0 VAC:</b>&nbsp; Común Corriente Alterna
-            </div>
-            <div class="color-row">
-                <div class="color-box cb-blue"></div> <b>24 VDC:</b>&nbsp; Control Corriente Directa
-            </div>
-            <div class="color-row">
-                <div class="color-box cb-whiteblue"></div> <b>0 VDC:</b>&nbsp; Común Corriente Directa
-            </div>
-        </div>
-
     </div>
 
     <div class="ui-container">
@@ -487,20 +350,6 @@
         const btnNext = document.getElementById('btn-next');
         const btnRestart = document.getElementById('btn-restart');
         const btnVoice = document.getElementById('btn-voice');
-        
-        const panelFabricante = document.getElementById('panel-fabricante');
-        const panelCliente = document.getElementById('panel-cliente');
-        const panelProyecto = document.getElementById('panel-proyecto');
-        const panelIdentificacion = document.getElementById('panel-identificacion');
-        const panelTecnico = document.getElementById('panel-tecnico');
-        const panelColores = document.getElementById('panel-colores');
-        
-        const lineFab = document.getElementById('line-fab');
-        const lineCli = document.getElementById('line-cli');
-        const lineProy = document.getElementById('line-proy');
-        const lineIden = document.getElementById('line-iden');
-        const lineTec = document.getElementById('line-tec');
-        const lineColores = document.getElementById('line-colores');
 
         let currentStep = -1;
         let isPlaying = false;
@@ -525,53 +374,35 @@
                 deactivate: () => { scene.classList.remove('splash-active'); introSplash.classList.remove('active'); }
             },
             'portada-3d': {
-                activate: () => { scene.classList.remove('splash-active'); introSplash.classList.remove('active'); scene.classList.add('is-3d'); },
-                deactivate: () => { scene.classList.remove('is-3d'); scene.classList.add('splash-active'); introSplash.classList.add('active'); }
-            },
-            'panel-fabricante': {
-                activate: () => { panelFabricante.classList.add('active'); lineFab.classList.add('active'); },
-                deactivate: () => { panelFabricante.classList.remove('active'); lineFab.classList.remove('active'); }
-            },
-            'panel-cliente': {
-                activate: () => { panelCliente.classList.add('active'); lineCli.classList.add('active'); },
-                deactivate: () => { panelCliente.classList.remove('active'); lineCli.classList.remove('active'); }
-            },
-            'panel-proyecto': {
-                activate: () => { panelProyecto.classList.add('active'); lineProy.classList.add('active'); },
-                deactivate: () => { panelProyecto.classList.remove('active'); lineProy.classList.remove('active'); }
-            },
-            'panel-identificacion': {
-                activate: () => { panelIdentificacion.classList.add('active'); lineIden.classList.add('active'); },
-                deactivate: () => { panelIdentificacion.classList.remove('active'); lineIden.classList.remove('active'); }
-            },
-            'panel-tecnico': {
-                activate: () => { panelTecnico.classList.add('active'); lineTec.classList.add('active'); },
-                deactivate: () => { panelTecnico.classList.remove('active'); lineTec.classList.remove('active'); }
-            },
-            'panel-colores': {
-                activate: () => { panelColores.classList.add('active'); lineColores.classList.add('active'); },
-                deactivate: () => { panelColores.classList.remove('active'); lineColores.classList.remove('active'); }
+                activate: () => {
+                    scene.classList.remove('splash-active');
+                    introSplash.classList.remove('active');
+                    // La inclinación de un manual con páginas genéricas la maneja
+                    // el ciclo de 3 posiciones por página (ver renderStep/
+                    // goNextAuto más abajo) — no aquí, porque esto se activa
+                    // durante el objetivo, que debe quedarse PLANO (posición 1).
+                    // La demo original (sin escenario dinámico) se sigue
+                    // inclinando aquí, como siempre.
+                    if (!usingDynamicStage) scene.classList.add('is-3d');
+                },
+                deactivate: () => {
+                    if (!usingDynamicStage) scene.classList.remove('is-3d');
+                    scene.classList.add('splash-active');
+                    introSplash.classList.add('active');
+                }
             }
         };
         const noop = () => {};
 
+        // Estos 3 pasos son el único "guion" fijo que le queda al archivo — sirven
+        // de red por si alguien abre viewer.html sin ningún manual real (sin "id",
+        // o con el id de la demo vieja): un fallback mínimo, no un manual de
+        // verdad. Cualquier manual real trae su propio guion desde la API (ver
+        // applyEditorData) y estos tres ni se usan (se vacían antes).
         const steps = [
             { text: "Hola, les doy la bienvenida. Soy Mateo, su instructor virtual en Energki Robotics.", activate: namedPanels['intro-splash'].activate, deactivate: namedPanels['intro-splash'].deactivate },
-            { text: "El objetivo de este curso es desarrollar las habilidades necesarias para entender e interpretar de manera segura, un diagrama eléctrico de Clevertech.", activate: namedPanels['intro-splash'].activate, deactivate: noop },
-            { text: "Comencemos. Lo primero que vemos al abrir nuestro manual, es la página de portada.", activate: namedPanels['portada-3d'].activate, deactivate: namedPanels['portada-3d'].deactivate },
-            { text: "Aquí no solo confirmamos que Clevertech es el fabricante...", activate: namedPanels['panel-fabricante'].activate, deactivate: namedPanels['panel-fabricante'].deactivate },
-            { text: "Sino que identificamos claramente el cliente final...", activate: namedPanels['panel-cliente'].activate, deactivate: namedPanels['panel-cliente'].deactivate },
-            { text: "Y la descripción exacta de la máquina y el proyecto a intervenir.", activate: namedPanels['panel-proyecto'].activate, deactivate: namedPanels['panel-proyecto'].deactivate },
-            { text: "Para solicitar refacciones, aquí validamos el número de serie y diagrama eléctrico.", activate: namedPanels['panel-identificacion'].activate, deactivate: namedPanels['panel-identificacion'].deactivate },
-            { text: "Pero aún más importante para nuestro trabajo de campo y seguridad:", activate: noop, deactivate: noop },
-            { text: "Llegamos a los Datos de Alimentación. Una máquina puede tener múltiples tableros, pero como vimos en la identificación azul, este manual corresponde a un único panel eléctrico principal.", activate: namedPanels['panel-tecnico'].activate, deactivate: namedPanels['panel-tecnico'].deactivate },
-            { text: "La Potencia Nominal representa el consumo eléctrico máximo calculado sumando los componentes internos y todos los elementos de campo, como sensores, islas de válvulas y variadores de frecuencia.", activate: noop, deactivate: noop },
-            { text: "La Corriente Nominal es el amperaje de diseño a plena carga, aquí 118 Amperes. La Frecuencia es de 60 Hertz, estándar en América, a diferencia de los 50 Hertz comunes en Europa o Asia.", activate: noop, deactivate: noop },
-            { text: "El Voltaje de Operación indica 480 Voltios trifásicos con conexión a tierra física, sin requerir neutro. Además, la Tensión Auxiliar de 24 Voltios de corriente directa, es la energía de control para el P.L.C. y sus periféricos.", activate: noop, deactivate: noop },
-            { text: "También se especifica la Corriente de Corto Circuito de 65 Kilo Amperes, que es la capacidad máxima que soporta antes de un fallo catastrófico. Y por último, la Normativa de Referencia, indicando que el tablero cumple con el estándar americano U.L. y lleva su etiqueta de certificación.", activate: noop, deactivate: noop },
-            { text: "Finalmente, el código de colores. Las líneas de potencia L1, L2 y L3 SIEMPRE son NEGRAS, contengan 220, 380 o 480 Voltios.", activate: namedPanels['panel-colores'].activate, deactivate: namedPanels['panel-colores'].deactivate },
-            { text: "La Tierra Física será VERDE o AMARILLO con VERDE. ¡Cuidado con el cable NARANJA! Significa que tiene voltaje aunque el interruptor principal esté apagado.", activate: noop, deactivate: noop },
-            { text: "Y para control: ROJO para corriente alterna, AZUL para directa, y BLANCO para los comunes. Verifícalos siempre antes de intervenir.", activate: noop, deactivate: noop }
+            { text: "El objetivo de este curso es desarrollar las habilidades necesarias para entender e interpretar de manera segura un diagrama eléctrico.", activate: namedPanels['intro-splash'].activate, deactivate: noop },
+            { text: "Comencemos. Abre un manual desde el dashboard para empezar una capacitación de verdad.", activate: namedPanels['portada-3d'].activate, deactivate: namedPanels['portada-3d'].deactivate }
         ];
 
         // Un manual cargado por id (fuera de la demo original) empieza limpio,
@@ -608,6 +439,19 @@
                 if (targetPage !== null && targetPage !== activeDynPageIndex) {
                     renderPaginaDinamica(targetPage);
                 }
+                // is-3d del escenario genérico: inclinado mientras se narre un
+                // PUNTO de alguna página; plano en cualquier otro paso (bienvenida,
+                // objetivo, o el "contexto" propio de una página — Posición 1, ver
+                // stepWantsTilt). Autoritativo: corrige el estado sin importar
+                // cómo se llegó aquí (Play automático, Adelantar/Regresar manual,
+                // o stepForward, que además inserta una pausa/narra el contexto
+                // ANTES de llamar renderStep al cruzar de página — ver más abajo).
+                const wantsTilt = stepWantsTilt(targetIndex);
+                scene.classList.toggle('is-3d', wantsTilt);
+                dynTiltActive = wantsTilt;
+            } else {
+                scene.classList.remove('is-3d');
+                dynTiltActive = false;
             }
 
             steps.forEach(s => s.deactivate());
@@ -813,15 +657,132 @@
             }
         }
 
-        function goNextAuto() {
-            if (currentStep < steps.length - 1) {
-                currentStep++;
-                renderStep(currentStep);
-                playCurrentStep();
-            } else {
-                pause();
-                subtitleBox.innerHTML = '<span class="k-word highlight">Módulo</span> <span class="k-word highlight">1</span> <span class="k-word highlight">Completado.</span> <span class="k-word highlight">(Usa</span> <span class="k-word highlight">Regresar</span> <span class="k-word highlight">o</span> <span class="k-word highlight">Reiniciar)</span>';
+        // Cuánto se ve el documento plano (sin tarjetas) antes de inclinarse —
+        // el "momento para que el usuario vea la imagen" pedido. Ver stepForward.
+        const PAGE_TRANSITION_PAUSE_MS = 1800;
+        // Debe coincidir con la transición de .dyn-doc/#dynamic-stage (2s): el
+        // punto no debe aparecer AL MISMO TIEMPO que se inclina, sino hasta que
+        // termine de inclinarse.
+        const TILT_MS = 2000;
+
+        // Ciclo de 3 posiciones por página (plana -> inclinada -> aparece el
+        // punto): cada AVANCE —un clic de Adelantar, o un tic del reproductor
+        // automático— muestra UNA posición a la vez, no las tres de un jalón
+        // (así lo pidieron). dynPendingPhase lleva la cuenta:
+        //   null    = nada pendiente, avance normal de un paso.
+        //   'flat'  = ya se cambió/mostró la imagen plana, falta inclinarla.
+        //   'tilted'= ya se inclinó, falta prender el primer punto (dynPendingIndex).
+        // Solo Adelantar/Play pasan por este ciclo; Regresar salta directo (ver
+        // goPrev) — no se pidió una versión "al revés" de la animación.
+        let dynPendingPhase = null;
+        let dynPendingIndex = null;
+
+        // isAuto=true: se llama sola por temporizador (Play). isAuto=false: la
+        // llama un clic de Adelantar, avanza una sola posición y se detiene ahí.
+        function stepForward(isAuto) {
+            if (dynPendingPhase === 'flat') {
+                scene.classList.add('is-3d');
+                dynTiltActive = true;
+                dynPendingPhase = 'tilted';
+                if (isAuto) {
+                    clearTimeout(autoPlayTimer);
+                    autoPlayTimer = setTimeout(() => { if (isPlaying) stepForward(true); }, TILT_MS);
+                }
+                return;
             }
+            if (dynPendingPhase === 'tilted') {
+                currentStep = dynPendingIndex;
+                dynPendingPhase = null;
+                dynPendingIndex = null;
+                renderStep(currentStep); // ya inclinado: esto prende el punto correcto
+                if (isAuto) playCurrentStep(); else showStepPreview(currentStep);
+                return;
+            }
+
+            // Sin transición pendiente: avance normal de un paso.
+            if (currentStep >= steps.length - 1) {
+                if (isAuto) {
+                    pause();
+                    subtitleBox.innerHTML = '<span class="k-word highlight">Módulo</span> <span class="k-word highlight">1</span> <span class="k-word highlight">Completado.</span> <span class="k-word highlight">(Usa</span> <span class="k-word highlight">Regresar</span> <span class="k-word highlight">o</span> <span class="k-word highlight">Reiniciar)</span>';
+                }
+                return;
+            }
+
+            const nextIndex = currentStep + 1;
+            const nextPage = pageIndexForStep(nextIndex);
+            const nextWantsTilt = stepWantsTilt(nextIndex);
+
+            // El paso que sigue es el "contexto" de una página (plano, con su
+            // propia narración) — se muestra como un paso normal más, sin pausa
+            // fija: dura lo que dure narrarlo, igual que el objetivo de la
+            // página 1. La inclinación llega después, con el primer punto.
+            if (nextPage !== null && !nextWantsTilt) {
+                if (dynTiltActive) {
+                    scene.classList.remove('is-3d');
+                    dynTiltActive = false;
+                    Object.values(panelEls).forEach(p => p.deactivate());
+                    subtitleBox.innerHTML = '';
+                }
+                if (nextPage !== activeDynPageIndex) renderPaginaDinamica(nextPage);
+                scene.classList.toggle('dynamic-active', usingDynamicStage);
+                currentStep = nextIndex;
+                renderStep(currentStep); // deja is-3d apagado (stepWantsTilt es false para este paso)
+                if (isAuto) playCurrentStep(); else showStepPreview(currentStep);
+                return;
+            }
+
+            // Aplica solo cuando el paso que sigue es un PUNTO (se inclina) Y
+            // (todavía no estábamos inclinados —primera vez, o justo se vio el
+            // contexto de esta misma página—, O es un cruce DE VERAS a otra
+            // página distinta). Entre dos puntos de la MISMA página (ya
+            // inclinada) esto no debe dispararse.
+            const needsTransition = nextPage !== null && (!dynTiltActive || nextPage !== activeDynPageIndex);
+
+            if (needsTransition) {
+                // Ya se vio la Posición 1 de esta página (su "contexto", o el
+                // objetivo si es la página 1) — no hace falta la pausa fija de
+                // nuevo, se pasa directo a inclinar.
+                const alreadyOnPage = nextPage === activeDynPageIndex;
+
+                // Posición 3 de la página que se deja (si veníamos inclinados de
+                // otra): vuelve a plano, se apagan SOLO sus tarjetas (no todos los
+                // pasos — eso incluía al que quita el logo, y lo volvía a mostrar
+                // por error).
+                if (dynTiltActive) {
+                    scene.classList.remove('is-3d');
+                    dynTiltActive = false;
+                    Object.values(panelEls).forEach(p => p.deactivate());
+                    subtitleBox.innerHTML = ''; // no dejar el texto del último punto "pegado" mientras se ve la imagen sola
+                }
+                // Posición 1 de la nueva página (si no se había mostrado ya vía
+                // su contexto): cambia la imagen ya, se ve plana.
+                if (!alreadyOnPage) renderPaginaDinamica(nextPage);
+                scene.classList.toggle('dynamic-active', usingDynamicStage);
+
+                dynPendingIndex = nextIndex;
+                dynPendingPhase = 'flat';
+
+                if (alreadyOnPage) {
+                    // La Posición 1 ya se vio (contexto/objetivo) — se consume esa
+                    // fase de inmediato, sin esperar, y se pasa a inclinar.
+                    stepForward(isAuto);
+                    return;
+                }
+
+                if (isAuto) {
+                    clearTimeout(autoPlayTimer);
+                    autoPlayTimer = setTimeout(() => { if (isPlaying) stepForward(true); }, PAGE_TRANSITION_PAUSE_MS);
+                }
+                return;
+            }
+
+            currentStep = nextIndex;
+            renderStep(currentStep);
+            if (isAuto) playCurrentStep(); else showStepPreview(currentStep);
+        }
+
+        function goNextAuto() {
+            stepForward(true);
         }
 
         const btnVoiceIcon = document.getElementById('btn-voice-icon');
@@ -837,15 +798,21 @@
         });
 
         function play() {
-            if (currentStep === steps.length - 1) currentStep = -1;
+            if (currentStep === steps.length - 1 && !dynPendingPhase) currentStep = -1;
             isPlaying = true;
             btnPlayIcon.src = PAUSE_ICON_SVG;
 
             if (currentStep === -1) {
                 currentStep = 0;
                 renderStep(currentStep);
+                playCurrentStep();
+                return;
             }
-            playCurrentStep();
+
+            // Si se pausó a medio ciclo de 3 posiciones (plana o ya inclinada
+            // pero sin el punto todavía), seguir desde ahí — no renarrar el
+            // punto anterior de la nada.
+            if (dynPendingPhase) stepForward(true); else playCurrentStep();
         }
 
         function pause() {
@@ -862,15 +829,17 @@
 
         function goNext() {
             pause();
-            if (currentStep < steps.length - 1) {
-                currentStep++;
-                renderStep(currentStep);
-                showStepPreview(currentStep);
-            }
+            stepForward(false); // un clic = una posición (plana / inclinada / punto), ver stepForward
         }
 
         function goPrev() {
             pause();
+            // Regresar no tiene la versión "al revés" del ciclo de 3 posiciones
+            // (no se pidió) — salta directo al paso anterior, con la inclinación
+            // que le corresponda (renderStep ya decide eso solo). Se descarta
+            // cualquier transición a medias para no dejar un estado raro.
+            dynPendingPhase = null;
+            dynPendingIndex = null;
             if (currentStep > 0) {
                 currentStep--;
                 renderStep(currentStep);
@@ -881,9 +850,23 @@
         }
 
         function resetPresentation() {
-            pause(); 
+            pause();
+            dynPendingPhase = null;
+            dynPendingIndex = null;
             currentStep = -1;
-            renderStep(currentStep); 
+            // Si ya se había avanzado a otra página antes de reiniciar, sin esto
+            // la imagen dinámica se quedaba mostrando la ÚLTIMA página vista (la
+            // 2, la 3...) durante toda la introducción del reinicio — el
+            // escenario dinámico se hace visible desde el primer paso
+            // (bienvenida), no solo al llegar a un punto real, así que esa
+            // imagen vieja se alcanzaba a ver antes de "corregirse sola" al
+            // llegar de nuevo a la página 1. Se regresa a la primera página con
+            // contenido de una vez, para que ya esté bien desde el inicio.
+            if (usingDynamicStage) {
+                const firstIndexWithContent = customPaginas.findIndex(pg => pg.paneles.length > 0);
+                if (firstIndexWithContent >= 0) renderPaginaDinamica(firstIndexWithContent);
+            }
+            renderStep(currentStep);
         }
 
         btnPlay.addEventListener('click', togglePlay);
@@ -893,9 +876,9 @@
 
         // --- Recepción de datos desde el editor (editor.html) ---
 
-        // IMPORTANTE: el marco del documento (.document-base / #dynamic-stage) se
-        // mantiene SIEMPRE en proporción fija 1.4:1, igual que en el ejemplo. El giro
-        // 3D (rotateX/rotateZ/translateZ) está calibrado exactamente para esa forma;
+        // IMPORTANTE: el marco del documento (#dynamic-stage) se mantiene SIEMPRE
+        // en proporción fija 1.4:1. El giro 3D (rotateX/rotateZ/translateZ) está
+        // calibrado exactamente para esa forma;
         // si el marco cambiara de proporción según cada imagen, el mismo giro fijo
         // deformaría visualmente el rectángulo (se ve "achocado"/aplastado), aunque
         // la imagen en sí no se distorsione. Por eso NO se toca el aspect-ratio del
@@ -991,11 +974,16 @@
         // tarjetas/líneas para la nueva, no se crean escenarios nuevos.
         //
         // customPaginas: por cada página del manual, sus paneles "genéricos" (id
-        // no reconocido) — los "named" (panel-fabricante, etc.) siguen aparte, con
-        // su propio DOM fijo, ninguno vive en una página.
+        // no reconocido) — los "named" (intro-splash/portada-3d) siguen aparte,
+        // ninguno vive en una página.
         let customPaginas = [];
         // Qué página está actualmente construida en el DOM (-1 = ninguna aún).
         let activeDynPageIndex = -1;
+        // Si el documento genérico está inclinado (Posición 2) ahora mismo — lo
+        // controla renderStep()/goNextAuto() (ciclo de 3 posiciones por página:
+        // plano -> inclinado con puntos -> plano de nuevo antes de la siguiente
+        // página), no 'portada-3d' (que solo se usa para la demo original).
+        let dynTiltActive = false;
         // { [panelId]: índice de página } — para saber a qué página saltar ANTES
         // de reproducir el paso de un panel que está en otra página.
         let panelPageIndex = {};
@@ -1019,11 +1007,25 @@
         // de página.
         function pageIndexForStep(index) {
             const step = steps[index];
-            if (!step || !step.panelIds) return null;
+            if (!step) return null;
+            // Paso de "contexto" de página (editor.html: ensurePaginaContextSteps/
+            // buildAutoSteps): plano, no tiene panelIds propios — su página va
+            // marcada directo en pageFlat.
+            if (typeof step.pageFlat === 'number') return step.pageFlat;
+            if (!step.panelIds) return null;
             for (const id of step.panelIds) {
                 if (Object.prototype.hasOwnProperty.call(panelPageIndex, id)) return panelPageIndex[id];
             }
             return null;
+        }
+
+        // A diferencia de pageIndexForStep (¿a qué página pertenece, para saber
+        // si hay que cambiar la imagen?), esto dice si ESE paso en particular debe
+        // verse inclinado. Un punto normal sí; el "contexto" de una página (plano,
+        // con su propia narración, antes de inclinarse) no.
+        function stepWantsTilt(index) {
+            const step = steps[index];
+            return !!(step && typeof step.pageFlat !== 'number' && pageIndexForStep(index) !== null);
         }
 
         // Solo la línea necesita seguimiento constante (el pin se mueve todo el
@@ -1401,7 +1403,7 @@
             // "transform" a 2s (transition: all ...) para el giro 3D; ponerle
             // también una de opacity aquí pisaría esa regla y dejaría de animar el
             // giro la próxima vez que se active/desactive is-3d.
-            const image = document.getElementById('dynamic-image');
+            const image = document.getElementById('dynamic-image'); 
             const myToken = ++dynSwapToken;
             const FADE_MS = 280;
             [image, overlay, svg].forEach(el => {
@@ -1428,29 +1430,13 @@
 
             while (steps.length > baseStepsCount) steps.pop();
 
-            // El documento original (el que se inclina) no tenía imagen real (portada.png
-            // no existe en el proyecto). Si el manual trae una imagen subida, se usa aquí
-            // (siempre la de la página 1 — este marco fijo es de la demo original,
-            // aparte del escenario genérico de abajo, que sí soporta varias páginas).
-            const docBase = document.getElementById('doc');
-            const firstCanvas = rawPaginas[0] && rawPaginas[0].canvas;
-            if (docBase && firstCanvas && (firstCanvas.url || firstCanvas.imageData)) {
-                const src = firstCanvas.url || firstCanvas.imageData;
-                docBase.style.backgroundImage = `url('${src}')`;
-                docBase.style.backgroundSize = 'contain'; // Muestra la imagen completa, sin recortar ni estirar
-                docBase.style.backgroundRepeat = 'no-repeat';
-                docBase.style.backgroundPosition = 'center';
-                // El marco NO cambia de aspect-ratio (se queda en 1.4:1, igual que el
-                // ejemplo) para no deformar el giro 3D calibrado. Ver nota arriba.
-            }
-
-            // Los paneles con id conocido (panel-fabricante, panel-cliente, etc.) reutilizan
-            // el DOM/CSS original tal cual, para que se vea idéntico a la demo. Solo los
-            // paneles con id nuevo (de un diagrama distinto) usan el escenario genérico —
-            // y ESE sí puede tener varias páginas.
+            // 'intro-splash'/'portada-3d' (namedPanels) son ids reservados para la
+            // intro (logo + inclinación) — cualquier otro id de panel usa el
+            // escenario genérico, que sí puede tener varias páginas.
             customPaginas = rawPaginas.map(pg => ({
                 canvas: pg.canvas,
-                paneles: (pg.paneles || []).filter(p => !namedPanels[p.id])
+                paneles: (pg.paneles || []).filter(p => !namedPanels[p.id]),
+                contexto: pg.contexto || ''
             }));
             panelPageIndex = {};
             customPaginas.forEach((pg, idx) => {
@@ -1479,6 +1465,11 @@
                         steps.push({
                             text: step.text || '',
                             panelIds,
+                            // pageFlat (ensurePaginaContextSteps/buildAutoSteps en el
+                            // editor): marca los pasos de "contexto" de página, planos
+                            // — sin copiarla aquí, pageIndexForStep/stepWantsTilt no
+                            // podrían distinguirlos de un punto normal.
+                            pageFlat: step.pageFlat,
                             activate: () => panelIds.forEach(activatePanel),
                             deactivate: () => panelIds.forEach(deactivatePanel)
                         });
@@ -1498,12 +1489,28 @@
                     });
                 });
             } else {
-                allCustomPaneles.forEach(panel => {
-                    steps.push({
-                        text: panel.narrativa || panel.titulo || panel.id,
-                        panelIds: [panel.id],
-                        activate: () => activatePanel(panel.id),
-                        deactivate: () => deactivatePanel(panel.id)
+                // Sin guion propio (manual muy viejo, o cargado sin pasar por el
+                // editor): se arma uno mínimo aquí, página por página, con su
+                // "contexto" (si tiene) antes de sus puntos — mismo criterio que
+                // buildAutoSteps() en el editor.
+                customPaginas.forEach((pg, idx) => {
+                    const contexto = idx > 0 ? (pg.contexto || '').trim() : '';
+                    if (contexto) {
+                        steps.push({
+                            text: contexto,
+                            panelIds: [],
+                            pageFlat: idx,
+                            activate: () => {},
+                            deactivate: () => {}
+                        });
+                    }
+                    pg.paneles.forEach(panel => {
+                        steps.push({
+                            text: panel.narrativa || panel.titulo || panel.id,
+                            panelIds: [panel.id],
+                            activate: () => activatePanel(panel.id),
+                            deactivate: () => deactivatePanel(panel.id)
+                        });
                     });
                 });
             }
