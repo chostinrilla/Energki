@@ -143,7 +143,7 @@
             display: flex; align-items: center; justify-content: center;
             z-index: 3000;
         }
-        .modal-overlay[hidden] { display: none; }
+        .modal-overlay[hidden] { display: none; }   
         .modal-box {
             background: #0a101a;
             border: 1px solid #00f0ff;
@@ -250,20 +250,24 @@
             skipTimer = setTimeout(() => { skipIntro.classList.add('skip-hidden'); }, 3000);
         }
 
-        introVideo.addEventListener('ended', closeIntro);
-        introVideo.addEventListener('error', closeIntro);
-        introVideo.addEventListener('playing', startSkipTimer, { once: true });
-        introVideo.play().catch(() => {
-            startIntro.hidden = false;
-        });
-        startIntro.addEventListener('click', function() {
-            startIntro.hidden = true;
-            introVideo.play();
-        });
-        skipIntro.addEventListener('click', function() {
-            clearTimeout(skipTimer);
-            closeIntro();
-        });
+        // DESACTIVADO TEMPORALMENTE a pedido (para no tener que verla/saltarla en
+        // cada prueba durante este período de pruebas seguidas). Para reactivarla:
+        // descomenta este bloque y borra el "closeIntro();" de la línea de abajo.
+        // introVideo.addEventListener('ended', closeIntro);
+        // introVideo.addEventListener('error', closeIntro);
+        // introVideo.addEventListener('playing', startSkipTimer, { once: true });
+        // introVideo.play().catch(() => {
+        //     startIntro.hidden = false;
+        // });
+        // startIntro.addEventListener('click', function() {
+        //     startIntro.hidden = true;
+        //     introVideo.play();
+        // });
+        // skipIntro.addEventListener('click', function() {
+        //     clearTimeout(skipTimer);
+        //     closeIntro();
+        // });
+        closeIntro();
 
         const loadingState = document.getElementById('loading-state');
         const errorState = document.getElementById('error-state');

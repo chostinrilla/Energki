@@ -86,6 +86,88 @@
         }
         .preview-toggle-btn.active { background: #00f0ff; color: #000; box-shadow: 0 0 12px rgba(0,240,255,0.6); }
 
+        /* --- NAVEGACIÓN ENTRE PÁGINAS (varias imágenes por manual) ---
+           Diseño "peek": el lado izquierdo/derecho asoma una miniatura borrosa de
+           la página vecina (no un botón ciego) — al pasar el mouse se aclara. En
+           la última página, el lado derecho se convierte en "+" para agregar una
+           nueva (add-mode). :has() en vez de selector de hermanos: así no importa
+           el orden/anidado exacto del HTML de canvas-row. */
+        .page-indicator {
+            position: absolute;
+            top: 20px; left: 50%; transform: translateX(-50%);
+            color: rgba(255,255,255,0.55);
+            font-size: 13px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        .canvas-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .page-peek {
+            position: relative;
+            width: 70px;
+            height: 60vh;
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            flex-shrink: 0;
+            opacity: 0.55;
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            background: #0a101a;
+            transition: opacity 0.25s ease, transform 0.2s ease;
+        }
+        .page-peek:hover { opacity: 1; transform: scale(1.03); }
+        .page-peek.disabled { opacity: 0; pointer-events: none; }
+
+        .page-peek.add-mode {
+            opacity: 0.7;
+            border: 2px dashed rgba(0, 240, 255, 0.5);
+            background: rgba(0, 240, 255, 0.05);
+        }
+        .page-peek.add-mode:hover { opacity: 1; background: rgba(0, 240, 255, 0.14); }
+        .page-peek.add-mode .peek-img { display: none; }
+        .page-peek.add-mode .peek-arrow { font-size: 2.6rem; }
+
+        .peek-img {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            filter: blur(7px) brightness(0.45) saturate(0.85);
+            transition: filter 0.25s ease;
+        }
+        .page-peek:hover .peek-img { filter: blur(5px) brightness(0.6) saturate(0.95); }
+
+        .peek-arrow {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.2rem; font-weight: 700; color: #fff;
+            text-shadow: 0 0 14px rgba(0, 240, 255, 0.9);
+            pointer-events: none;
+        }
+
+        /* Solo tienen sentido en modo plano 2D: en Vista Previa 3D estorbarían
+           sobre la imagen inclinada, y cambiar de página ahí no está contemplado
+           (arrastrar tarjetas ya usa esa vista). */
+        .workspace:has(.canvas-container.preview-mode) .page-peek,
+        .workspace:has(.canvas-container.preview-mode) .page-indicator {
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .page-peek { width: 40px; height: 36vh; }
+            .peek-arrow { font-size: 1.6rem; }
+            .page-peek.add-mode .peek-arrow { font-size: 2rem; }
+            .canvas-row { gap: 8px; }
+        }
+
         .canvas-container {
             position: relative;
             /* Mismo 85% / 1020px máx. que usa el reproductor (.scene max-width:1200px
@@ -95,6 +177,14 @@
             width: 85%;
             max-width: 1020px;
             aspect-ratio: 1.4 / 1;
+            /* flex-shrink:0 — desde que .canvas-container vive dentro de
+               .canvas-row (los "peek" de páginas vecinas a los lados), al ser un
+               hijo flex normal el navegador lo encogía para hacerle lugar a esas
+               miniaturas, cambiando su ancho real — y por el comentario de arriba,
+               eso descalibraba la inclinación de Vista Previa (se veía deformada).
+               Con esto se queda siempre en su 85%/1020px fijo, sin importar los
+               peeks. */
+            flex-shrink: 0;
             background: #111;
             border: 2px dashed rgba(0, 240, 255, 0.3);
             border-radius: 8px;
@@ -148,12 +238,24 @@
             border-color: transparent;
         }
 
-        /* Capa plana para las tarjetas de vista previa: nunca se inclina, para
-           que el texto siga siendo legible (igual que en el reproductor). */
-        .card-overlay { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
-        .canvas-container.preview-mode .card-overlay { opacity: 1; pointer-events: auto; }
-        .card-overlay-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; }
-        .canvas-container.preview-mode .card-overlay-svg { opacity: 1; }
+        /* Capa plana para las tarjetas de vista previa: nunca se inclina, para que
+           el texto siga siendo legible (igual que en el reproductor). Vive FUERA
+           de .canvas-container a propósito: .canvas-container tiene preserve-3d
+           (lo necesita perspective para llegarle a .canvas-tilt), así que si esta
+           capa fuera su hija, compartiría ese mismo espacio 3D y el navegador la
+           ordenaría por profundidad real — la parte de la imagen que queda más
+           "adelante" por el giro tapaba la tarjeta. Por eso position:fixed y el
+           tamaño/posición se sincronizan por JS (ver syncCardOverlayRect), copiando
+           el rectángulo real de .canvas-container en cada cuadro. */
+        .card-overlay { position: fixed; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        .card-overlay.is-visible { opacity: 1; pointer-events: auto; }
+        /* overflow:visible es necesario: los <svg> recortan por defecto cualquier
+           cosa que se salga de su propio marco, y las líneas apuntan a tarjetas que
+           a propósito pueden estar posicionadas fuera del 0-100% (afuera del
+           documento) — sin esto, la parte de la línea más allá del borde del SVG
+           desaparecía aunque apuntara bien. */
+        .card-overlay-svg { position: fixed; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; overflow: visible; }
+        .card-overlay-svg.is-visible { opacity: 1; }
         .preview-line { stroke-dasharray: 8 8; opacity: 0.9; }
 
         #preview-img {
@@ -350,7 +452,13 @@
         .preview-card {
             max-width: 300px;
             transform: translate(-50%, -50%);
-            cursor: default; /* la Etapa 3 lo cambia a "grab" cuando ya se pueda arrastrar */
+            cursor: grab;
+            user-select: none; /* refuerzo del preventDefault en el mousedown, ver beginDragCard */
+        }
+        .preview-card.dragging {
+            cursor: grabbing;
+            z-index: 60;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.5), 0 0 25px rgba(255,255,255,0.4) !important;
         }
 
         /* --- MODAL PROPIO (reemplaza alert()/confirm() del navegador) --- */
@@ -499,19 +607,42 @@
         <h2 style="position: absolute; top: 20px; color: rgba(255,255,255,0.5);">Área de Mapeo Visual</h2>
         <button type="button" id="btn-preview-3d" class="btn btn-secondary preview-toggle-btn" onclick="togglePreview()">Vista Previa 3D</button>
 
-        <div class="canvas-container" id="canvas-container">
-            <span class="placeholder-text" id="placeholder-text">Sube una imagen para comenzar</span>
-            <!-- Se inclina en 3D en modo Vista Previa (mismos valores que el
-                 reproductor): contiene la imagen y los pines, que así quedan
-                 pegados a la imagen sin importar el ángulo. -->
-            <div class="canvas-tilt" id="canvas-tilt">
-                <img id="preview-img" alt="Vista previa del manual">
-                <div id="marker" class="marker" style="display: none;"></div>
+        <div id="page-indicator" class="page-indicator"></div>
+
+        <!-- Navegación entre páginas del manual (varias imágenes por manual):
+             asoma una miniatura borrosa de la página vecina (no un botón ciego).
+             Solo tiene sentido en modo plano 2D — se oculta en Vista Previa 3D
+             (ver CSS de .page-peek). page-peek-left no aparece en la primera
+             página (no se puede "anteponer", solo agregar al final);
+             page-peek-right se pone en "add-mode" (+ grande) cuando la página
+             actual es la última — clic ahí crea una página nueva. -->
+        <div class="canvas-row">
+            <div class="page-peek page-peek-left disabled" id="peek-prev" title="Página anterior" onclick="handlePagePrevClick()">
+                <img class="peek-img" id="peek-prev-img" alt="">
+                <div class="peek-arrow">&lsaquo;</div>
             </div>
-            <!-- Capa plana (nunca se inclina): tarjetas de vista previa + sus líneas. -->
-            <div class="card-overlay" id="card-overlay"></div>
-            <svg class="card-overlay-svg" id="card-overlay-svg"></svg>
+
+            <div class="canvas-container" id="canvas-container">
+                <span class="placeholder-text" id="placeholder-text">Sube una imagen para comenzar</span>
+                <!-- Se inclina en 3D en modo Vista Previa (mismos valores que el
+                     reproductor): contiene la imagen y los pines, que así quedan
+                     pegados a la imagen sin importar el ángulo. -->
+                <div class="canvas-tilt" id="canvas-tilt">
+                    <img id="preview-img" alt="Vista previa del manual">
+                    <div id="marker" class="marker" style="display: none;"></div>
+                </div>
+            </div>
+
+            <div class="page-peek page-peek-right disabled" id="peek-next" title="Página siguiente" onclick="handlePageNextClick()">
+                <img class="peek-img" id="peek-next-img" alt="">
+                <div class="peek-arrow" id="peek-next-arrow">&rsaquo;</div>
+            </div>
         </div>
+
+        <!-- Capa plana de tarjetas de Vista Previa + sus líneas: a propósito FUERA
+             de canvas-container (ver nota en el CSS de .card-overlay, arriba). -->
+        <div class="card-overlay" id="card-overlay"></div>
+        <svg class="card-overlay-svg" id="card-overlay-svg"></svg>
     </div>
 
     <!-- Modal propio (reemplaza alert()/confirm() del navegador) -->
@@ -569,15 +700,34 @@
         }
 
         // Lógica de Estado de la App
+        //
+        // "paginas": cada manual puede tener varias páginas, cada una con su propia
+        // imagen (canvas) y sus propios puntos (paneles). "steps" (el guion de
+        // narración) se queda GLOBAL, no por página — un panel de cualquier página
+        // puede tener su paso, y como ensurePanelSteps()/syncStepOrderToPaneles()
+        // solo tocan los paneles de la página activa en el momento en que se
+        // editan, el orden natural (trabajar la página 1, luego la 2) ya deja los
+        // pasos de la página 1 antes que los de la página 2 sin lógica especial —
+        // el reproductor los sigue en ese mismo orden y por eso pasa a la
+        // siguiente imagen justo cuando se acaban los pasos de la anterior.
+        //
+        // currentPagina() es la única puerta de entrada a la página activa: el
+        // resto del código usa currentPagina().canvas/.paneles en vez de leer
+        // manualData.paginas[activePageIndex] cada vez.
         let manualData = {
             configuracion: {
                 instructor: "Mateo",
                 empresa: "Energki Robotics"
             },
-            canvas: null,
-            paneles: [],
+            paginas: [
+                { canvas: null, paneles: [] }
+            ],
             steps: []
         };
+        let activePageIndex = 0;
+        function currentPagina() {
+            return manualData.paginas[activePageIndex];
+        }
 
         function generateId() {
             if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -587,7 +737,14 @@
         // Se genera desde ya (aunque el manual no se haya guardado) para poder organizar
         // las imágenes subidas en Drive en su propia carpeta desde el primer momento.
         let currentTrainingId = new URLSearchParams(location.search).get('id') || generateId();
-        let imageDirty = false;
+        // Imágenes elegidas pero aún no subidas, por página (mapa índice→File/base64):
+        // con varias páginas, la persona puede elegir la imagen de la página 1, pasar
+        // a la 2 y elegir otra, y así — todas deben subirse al guardar, no solo la
+        // última elegida. Se leen por índice (no por referencia a currentPagina())
+        // porque para cuando se guarda, la página activa puede ya ser otra distinta
+        // de aquella para la que se eligió cada imagen.
+        let pendingImages = {}; // { [pageIndex]: File }
+        let pendingImagePreviews = {}; // { [pageIndex]: 'data:...' } — para re-mostrarla si se vuelve a esa página antes de guardar
         let hasUnsavedChanges = false; // true si hay cambios que "Ver Reproductor" no reflejaría (aún no guardados)
         let hasSavedOnce = false; // true en cuanto existe alguna versión guardada en el servidor
         let formIsDirty = false; // true si el formulario de "Crear/Editar Panel" tiene cambios que no se han confirmado con su propio botón Guardar
@@ -622,12 +779,14 @@
             const file = e.target.files[0];
             if (file) {
                 fileNameDisplay.textContent = file.name;
+                const pageIndex = activePageIndex; // fija a la página que estaba activa AL ELEGIR el archivo
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     previewImg.src = event.target.result;
                     previewImg.style.display = 'block';
                     placeholderText.style.display = 'none';
-                    imageDirty = true;
+                    pendingImages[pageIndex] = file;
+                    pendingImagePreviews[pageIndex] = event.target.result;
                     hasUnsavedChanges = true;
                 }
                 reader.readAsDataURL(file);
@@ -640,7 +799,7 @@
 
         function renderExistingMarkers() {
             canvasContainer.querySelectorAll('.existing-marker').forEach(el => el.remove());
-            manualData.paneles.forEach(panel => {
+            currentPagina().paneles.forEach(panel => {
                 const dot = document.createElement('div');
                 dot.className = 'existing-marker' + (panel.id === editingPanelId ? ' selected' : '');
                 dot.dataset.id = panel.id;
@@ -708,6 +867,48 @@
         // { panel, pinEl, card, line } de cada tarjeta mostrada en Vista Previa.
         let previewItems = [];
 
+        // Dado un eje donde el % se convierte a píxeles como
+        // "mapStart + (%/100)*mapSize", devuelve el rango de % permitido para que
+        // el CENTRO de algo (con mitad de tamaño halfSize) quede dentro de
+        // [safeMin, safeMax] con un margen. Si el hueco seguro es más chico que la
+        // propia cosa, colapsa al punto medio en vez de invertir el rango.
+        function pctRangeForSafety(mapStart, mapSize, safeMin, safeMax, halfSize, margin) {
+            if (!mapSize) return [0, 0];
+            let lo = safeMin + margin + halfSize;
+            let hi = safeMax - margin - halfSize;
+            if (lo > hi) { lo = hi = (safeMin + safeMax) / 2; }
+            return [((lo - mapStart) / mapSize) * 100, ((hi - mapStart) / mapSize) * 100];
+        }
+
+        // Límite real (no un margen de % arbitrario): el CENTRO de la tarjeta no
+        // puede quedar fuera del área visible de .workspace ni debajo de la barra
+        // lateral, para que siempre se pueda seguir alcanzando/arrastrando aquí en
+        // el editor. (Hubo una versión que ADEMÁS exigía que cupiera en una
+        // simulación del reproductor sin barra lateral — se quitó: apretaba de más
+        // el lado izquierdo sin necesidad, porque el reproductor real ya tiene su
+        // propio límite de pantalla — ver el clamp real en layoutExplicitPopups,
+        // viewer.html — así que ya no hace falta adivinarlo dos veces aquí.)
+        // Se usa tanto al renderizar (por si una tarjeta quedó guardada en una
+        // posición mala de antes de este arreglo) como mientras se arrastra.
+        function clampCardPercent(leftPct, topPct, cardEl) {
+            const overlayRect = cardOverlay.getBoundingClientRect();
+            if (!overlayRect.width || !overlayRect.height) {
+                return { left: leftPct.toFixed(1) + '%', top: topPct.toFixed(1) + '%' };
+            }
+            const cardRect = cardEl.getBoundingClientRect();
+            const halfW = cardRect.width / 2;
+            const halfH = cardRect.height / 2;
+            const margin = 10;
+
+            const workspaceRect = workspaceEl.getBoundingClientRect();
+            const [minX, maxX] = pctRangeForSafety(overlayRect.left, overlayRect.width, workspaceRect.left, workspaceRect.right, halfW, margin);
+            const [minY, maxY] = pctRangeForSafety(overlayRect.top, overlayRect.height, workspaceRect.top, workspaceRect.bottom, halfH, margin);
+
+            const outLeft = Math.min(Math.max(leftPct, minX), maxX);
+            const outTop = Math.min(Math.max(topPct, minY), maxY);
+            return { left: outLeft.toFixed(1) + '%', top: outTop.toFixed(1) + '%' };
+        }
+
         function updatePreviewLineEnd(item) {
             const overlayRect = cardOverlay.getBoundingClientRect();
             if (!overlayRect.width || !overlayRect.height) return;
@@ -723,7 +924,7 @@
             cardOverlaySvg.innerHTML = '';
             previewItems = [];
 
-            manualData.paneles.forEach(panel => {
+            currentPagina().paneles.forEach(panel => {
                 try {
                     const pinEl = canvasTilt.querySelector(`.existing-marker[data-id="${CSS.escape(panel.id)}"]`);
                     if (!pinEl) return;
@@ -744,16 +945,86 @@
                     cardOverlay.appendChild(card);
 
                     const pos = panel.tarjeta || defaultCardPos(panel);
-                    card.style.top = pos.top;
-                    card.style.left = pos.left;
+                    const clamped = clampCardPercent(parseFloat(pos.left), parseFloat(pos.top), card);
+                    card.style.top = clamped.top;
+                    card.style.left = clamped.left;
 
                     const item = { panel, pinEl, card, line };
                     previewItems.push(item);
                     updatePreviewLineEnd(item);
+
+                    card.addEventListener('mousedown', function(e) {
+                        e.preventDefault(); // evita que se seleccione texto de la página al arrastrar
+                        e.stopPropagation();
+                        beginDragCard(item);
+                    });
                 } catch (e) {
                     console.error('No se pudo mostrar la vista previa de un punto', panel && panel.id, e);
                 }
             });
+        }
+
+        // --- Arrastrar una tarjeta de Vista Previa: mismo patrón que arrastrar un
+        // pin (beginDragPanel/onDragMove/onDragEnd), pero guarda en panel.tarjeta
+        // en vez de panel.origen, y mide contra card-overlay (capa plana) en vez
+        // de canvasContainer (que si está inclinado ya no sirve para esta cuenta). ---
+        let cardDragState = null;
+
+        function beginDragCard(item) {
+            cardDragState = item;
+            item.card.classList.add('dragging');
+            document.addEventListener('mousemove', onCardDragMove);
+            document.addEventListener('mouseup', onCardDragEnd);
+        }
+
+        function onCardDragMove(e) {
+            if (!cardDragState) return;
+            const rect = cardOverlay.getBoundingClientRect();
+            const leftPct = ((e.clientX - rect.left) / rect.width) * 100;
+            const topPct = ((e.clientY - rect.top) / rect.height) * 100;
+            // Sin límite a [0,100]: la imagen inclinada visualmente ocupa un área
+            // distinta a su propio rectángulo plano (que es contra lo que se mide
+            // aquí), y justo se quiere poder sacar la tarjeta del documento — un
+            // límite ahí topaba la tarjeta antes de llegar a donde se quería.
+            // clampCardPercent la deja salir del documento pero nunca fuera de la
+            // pantalla ni encima de la barra lateral (ver su comentario arriba).
+            const clamped = clampCardPercent(leftPct, topPct, cardDragState.card);
+
+            // Mueve la tarjeta real en vivo, y ya deja guardada la posición en el
+            // propio punto (igual que onDragMove hace con panel.origen).
+            cardDragState.card.style.left = clamped.left;
+            cardDragState.card.style.top = clamped.top;
+            cardDragState.panel.tarjeta = clamped;
+
+            updatePreviewLineEnd(cardDragState);
+        }
+
+        function onCardDragEnd() {
+            if (!cardDragState) return;
+            cardDragState.card.classList.remove('dragging');
+            cardDragState = null;
+            hasUnsavedChanges = true;
+            document.removeEventListener('mousemove', onCardDragMove);
+            document.removeEventListener('mouseup', onCardDragEnd);
+        }
+
+        // Copia el rectángulo real de canvas-container sobre card-overlay/-svg (que
+        // viven fuera de él a propósito, ver nota en el CSS) y prende/apaga su
+        // visibilidad según si Vista Previa está activa. Mismo patrón que
+        // syncOverlayRootRect() en el reproductor.
+        function syncCardOverlayRect() {
+            const rect = canvasContainer.getBoundingClientRect();
+            cardOverlay.style.top = rect.top + 'px';
+            cardOverlay.style.left = rect.left + 'px';
+            cardOverlay.style.width = rect.width + 'px';
+            cardOverlay.style.height = rect.height + 'px';
+            cardOverlaySvg.style.top = rect.top + 'px';
+            cardOverlaySvg.style.left = rect.left + 'px';
+            cardOverlaySvg.style.width = rect.width + 'px';
+            cardOverlaySvg.style.height = rect.height + 'px';
+            const active = canvasContainer.classList.contains('preview-mode');
+            cardOverlay.classList.toggle('is-visible', active);
+            cardOverlaySvg.classList.toggle('is-visible', active);
         }
 
         // x1/y1 (lado del pin) se siguen en vivo, igual que syncDynLines en el
@@ -761,6 +1032,7 @@
         // es una simple posición porcentual — hay que medir su posición real en
         // pantalla cada cuadro. Corre siempre; no hace nada si no hay vista previa activa.
         function syncPreviewLines() {
+            syncCardOverlayRect();
             if (previewItems.length) {
                 const overlayRect = cardOverlay.getBoundingClientRect();
                 if (overlayRect.width && overlayRect.height) {
@@ -781,21 +1053,26 @@
         }
         requestAnimationFrame(syncPreviewLines);
 
-        // El reproductor calibró perspective:1200px/translateZ:15px para una caja
-        // de 1020px de ancho (.scene max-width:1200px × #dynamic-stage 85%). Acá
-        // el área de trabajo compite con la barra lateral (400px), así que
-        // .canvas-container casi nunca mide esos 1020px — con perspective/translateZ
-        // fijos en px, la MISMA inclinación se ve más o menos deformada según qué
-        // tan chica salga la caja. Se escalan los dos en la misma proporción que el
-        // ancho real, así la deformación se ve igual sin importar el tamaño de pantalla.
+        // El reproductor calibró perspective:1200px/translateZ:15px para su propio
+        // marco (#dynamic-stage = .scene × 85%). PERO ".scene" solo llega a su
+        // máximo de 1200px en pantallas muy anchas — en una ventana más angosta
+        // mide menos, así que asumir un ancho fijo de 1020px acá (85% de 1200)
+        // estaba mal calibrado la mayoría de las veces: el mismo punto quedaba en
+        // un % del marco correcto, pero el marco mismo se veía inclinado con una
+        // intensidad ligeramente distinta entre editor y reproductor, y esa
+        // pequeña diferencia se notaba mucho en tarjetas puestas cerca del borde.
+        // Se recalcula el ancho de referencia con la MISMA fórmula que usa
+        // ".scene" (min(ancho de ventana, 1200px) × 85%), no un número fijo.
         const workspaceEl = document.querySelector('.workspace');
-        const TILT_REF_WIDTH = 1020;
         const TILT_REF_PERSPECTIVE = 1200;
         const TILT_REF_TRANSLATE_Z = 15;
+        function getViewerReferenceWidth() {
+            return Math.min(window.innerWidth, 1200) * 0.85;
+        }
         function applyPreviewTiltScale() {
             const actualWidth = canvasContainer.getBoundingClientRect().width;
             if (!actualWidth) return;
-            const scale = actualWidth / TILT_REF_WIDTH;
+            const scale = actualWidth / getViewerReferenceWidth();
             workspaceEl.style.perspective = (TILT_REF_PERSPECTIVE * scale) + 'px';
             canvasTilt.style.setProperty('--tilt-z', (TILT_REF_TRANSLATE_Z * scale) + 'px');
         }
@@ -806,6 +1083,7 @@
             btnPreview3d.textContent = active ? 'Cerrar Vista Previa' : 'Vista Previa 3D';
             if (active) {
                 applyPreviewTiltScale();
+                syncCardOverlayRect(); // ya con el tamaño correcto antes de crear las tarjetas
                 renderPreviewCards();
             } else {
                 cardOverlay.innerHTML = '';
@@ -822,7 +1100,14 @@
         // barra lateral cambia de ancho), se recalcula para que la caja no quede
         // con el escalado de un tamaño viejo.
         window.addEventListener('resize', () => {
-            if (canvasContainer.classList.contains('preview-mode')) applyPreviewTiltScale();
+            if (canvasContainer.classList.contains('preview-mode')) {
+                applyPreviewTiltScale();
+                // Vuelve a acomodar/clampear las tarjetas: el área segura de
+                // clampCardPercent depende del tamaño de .workspace, que también
+                // cambió. Sin esto, una tarjeta podía quedar mal ubicada (o de
+                // nuevo inalcanzable) después de redimensionar la ventana.
+                renderPreviewCards();
+            }
         });
 
         // --- Lista de puntos existentes: ver, buscar, editar, reposicionar, eliminar ---
@@ -920,14 +1205,14 @@
         }
 
         function renderPanelList() {
-            panelCountEl.textContent = `(${manualData.paneles.length})`;
+            panelCountEl.textContent = `(${currentPagina().paneles.length})`;
 
-            if (!manualData.paneles.length) {
+            if (!currentPagina().paneles.length) {
                 panelListEl.innerHTML = '<div class="panel-list-empty">Aún no hay puntos. Crea el primero arriba.</div>';
                 return;
             }
 
-            panelListEl.innerHTML = manualData.paneles.map(p => {
+            panelListEl.innerHTML = currentPagina().paneles.map(p => {
                 const preview = p.narrativa || p.resumen || '(sin narrativa)';
                 const selected = p.id === editingPanelId ? ' selected' : '';
                 const dragging = p.id === draggedPanelId ? ' dragging-row' : '';
@@ -967,11 +1252,11 @@
                 if (e.clientY < rect.top || e.clientY > rect.bottom) continue;
                 const hoveredId = row.dataset.id;
                 if (hoveredId && hoveredId !== draggedPanelId) {
-                    const fromIndex = manualData.paneles.findIndex(p => p.id === draggedPanelId);
-                    const toIndex = manualData.paneles.findIndex(p => p.id === hoveredId);
+                    const fromIndex = currentPagina().paneles.findIndex(p => p.id === draggedPanelId);
+                    const toIndex = currentPagina().paneles.findIndex(p => p.id === hoveredId);
                     if (fromIndex === -1 || toIndex === -1) break;
-                    const [moved] = manualData.paneles.splice(fromIndex, 1);
-                    manualData.paneles.splice(toIndex, 0, moved);
+                    const [moved] = currentPagina().paneles.splice(fromIndex, 1);
+                    currentPagina().paneles.splice(toIndex, 0, moved);
                     hasUnsavedChanges = true;
                     renderPanelList();
                 }
@@ -999,7 +1284,7 @@
         function ensurePanelSteps() {
             if (!Array.isArray(manualData.steps)) manualData.steps = [];
             const existingIds = new Set(manualData.steps.map(s => s.id));
-            manualData.paneles.forEach(p => {
+            currentPagina().paneles.forEach(p => {
                 const stepId = `step-${p.id}`;
                 if (!existingIds.has(stepId)) {
                     manualData.steps.push({
@@ -1017,8 +1302,8 @@
         function syncStepOrderToPaneles() {
             if (!Array.isArray(manualData.steps) || !manualData.steps.length) return;
 
-            const panelStepIds = new Set(manualData.paneles.map(p => `step-${p.id}`));
-            const inNewOrder = manualData.paneles
+            const panelStepIds = new Set(currentPagina().paneles.map(p => `step-${p.id}`));
+            const inNewOrder = currentPagina().paneles
                 .map(p => manualData.steps.find(s => s.id === `step-${p.id}`))
                 .filter(Boolean);
 
@@ -1029,7 +1314,7 @@
         }
 
         async function startEditPanel(id) {
-            const panel = manualData.paneles.find(p => p.id === id);
+            const panel = currentPagina().paneles.find(p => p.id === id);
             if (!panel) return false;
 
             // Si hay algo sin confirmar en el punto que se está creando/editando
@@ -1102,13 +1387,121 @@
             renderPanelList();
         }
 
+        // --- Navegación entre páginas (varias imágenes por manual) ---
+        const peekPrev = document.getElementById('peek-prev');
+        const peekNext = document.getElementById('peek-next');
+        const peekPrevImg = document.getElementById('peek-prev-img');
+        const peekNextImg = document.getElementById('peek-next-img');
+        const peekNextArrow = document.getElementById('peek-next-arrow');
+        const pageIndicatorEl = document.getElementById('page-indicator');
+
+        // La miniatura usa la imagen ya subida de esa página, o la que esté
+        // pendiente de subir si la acaban de elegir sin guardar todavía (mismo
+        // criterio que renderPaginaActual usa para la página activa).
+        function thumbUrlForPage(idx) {
+            const pg = manualData.paginas[idx];
+            if (!pg) return '';
+            return pendingImagePreviews[idx] || (pg.canvas && pg.canvas.url) || '';
+        }
+
+        function updatePeeks() {
+            const total = manualData.paginas.length;
+            const isFirst = activePageIndex === 0;
+            const isLast = activePageIndex === total - 1;
+
+            peekPrev.classList.toggle('disabled', isFirst);
+            if (!isFirst) {
+                const url = thumbUrlForPage(activePageIndex - 1);
+                if (url) peekPrevImg.src = url; else peekPrevImg.removeAttribute('src');
+            }
+
+            if (!isLast) {
+                peekNext.classList.remove('disabled', 'add-mode');
+                peekNext.title = 'Página siguiente';
+                peekNextArrow.textContent = '›';
+                const url = thumbUrlForPage(activePageIndex + 1);
+                if (url) peekNextImg.src = url; else peekNextImg.removeAttribute('src');
+            } else {
+                // Última página: en vez de ocultar la flecha, se ofrece agregar una nueva.
+                peekNext.classList.remove('disabled');
+                peekNext.classList.add('add-mode');
+                peekNext.title = 'Agregar página';
+                peekNextArrow.textContent = '+';
+                peekNextImg.removeAttribute('src');
+            }
+
+            pageIndicatorEl.textContent = total > 1 ? `Página ${activePageIndex + 1} de ${total}` : '';
+        }
+
+        // Repinta TODO lo que depende de la página activa: imagen, puntos sobre la
+        // imagen, lista de puntos, y los botones de navegación. Se usa tanto al
+        // cargar un manual como al cambiar de página con los botones </>/+.
+        function renderPaginaActual() {
+            cancelEditPanel(); // ya no aplica seguir "editando" un punto de otra página; de paso repinta puntos+lista
+
+            const pagina = currentPagina();
+            // Si hay una imagen elegida pero aún no subida para ESTA página
+            // (pendingImagePreviews), se muestra esa — si no, la ya guardada.
+            const pendingUrl = pendingImagePreviews[activePageIndex];
+            const savedUrl = pagina.canvas && pagina.canvas.url;
+            const imgUrl = pendingUrl || savedUrl;
+
+            if (imgUrl) {
+                previewImg.src = imgUrl;
+                previewImg.style.display = 'block';
+                placeholderText.style.display = 'none';
+            } else {
+                previewImg.removeAttribute('src');
+                previewImg.style.display = 'none';
+                placeholderText.style.display = 'block';
+            }
+            fileNameDisplay.textContent = pendingImages[activePageIndex] ? pendingImages[activePageIndex].name : '';
+
+            updatePeeks();
+        }
+
+        // Si hay algo sin confirmar en el punto que se está editando, avisa antes
+        // de cambiar de página (si no, se pierde en silencio) — mismo patrón que
+        // ya usa startEditPanel al cambiar entre puntos.
+        async function confirmDiscardFormIfDirty(message) {
+            if (!formIsDirty) return true;
+            return appConfirm(message, 'Continuar de todos modos', 'Cancelar');
+        }
+
+        async function handlePagePrevClick() {
+            if (activePageIndex === 0) return;
+            const ok = await confirmDiscardFormIfDirty('Tienes cambios sin guardar en el punto que estabas editando. Si cambias de página ahora, se van a perder.');
+            if (!ok) return;
+            activePageIndex--;
+            renderPaginaActual();
+        }
+
+        async function handlePageNextClick() {
+            const isLast = activePageIndex === manualData.paginas.length - 1;
+            const ok = await confirmDiscardFormIfDirty(isLast
+                ? 'Tienes cambios sin guardar en el punto que estabas editando. Si agregas una página ahora, se van a perder.'
+                : 'Tienes cambios sin guardar en el punto que estabas editando. Si cambias de página ahora, se van a perder.');
+            if (!ok) return;
+
+            if (isLast) {
+                manualData.paginas.push({ canvas: null, paneles: [] });
+                activePageIndex = manualData.paginas.length - 1;
+                hasUnsavedChanges = true;
+                renderPaginaActual();
+                imageUpload.click(); // abre el selector de archivo de inmediato: el botón "sirve para añadir una imagen"
+            } else {
+                activePageIndex++;
+                renderPaginaActual();
+            }
+        }
+
         async function deletePanel(id) {
-            const panel = manualData.paneles.find(p => p.id === id);
+            const panel = currentPagina().paneles.find(p => p.id === id);
             if (!panel) return;
             const confirmed = await appConfirm(`¿Eliminar el punto "${panel.titulo || panel.id}"? Esto no se puede deshacer.`, 'Eliminar', 'Cancelar');
             if (!confirmed) return;
 
-            manualData.paneles = manualData.paneles.filter(p => p.id !== id);
+            currentPagina().paneles = currentPagina().paneles.filter(p => p.id !== id);
             hasUnsavedChanges = true;
             if (editingPanelId === id) cancelEditPanel();
 
@@ -1129,30 +1522,29 @@
                 if (data.error) throw new Error(data.error);
 
                 manualData.configuracion = data.configuracion || manualData.configuracion;
-                manualData.canvas = data.canvas || null;
-                manualData.paneles = data.paneles || [];
+                // Compatibilidad: manuales guardados antes de "paginas" traen
+                // "canvas"/"paneles" sueltos en la raíz, no un arreglo "paginas". Si
+                // no viene "paginas", se arma uno solo con esos datos — el manual se
+                // ve y edita exactamente igual que antes, como su única página.
+                manualData.paginas = (Array.isArray(data.paginas) && data.paginas.length)
+                    ? data.paginas
+                    : [{ canvas: data.canvas || null, paneles: data.paneles || [] }];
+                activePageIndex = 0;
                 manualData.steps = data.steps || []; // se preservan tal cual para no perder narraciones ya guardadas
 
                 document.getElementById('training-title').value = data.title || '';
                 document.getElementById('instructor-name').value = manualData.configuracion.instructor || 'Mateo';
                 document.getElementById('course-objective').value = manualData.configuracion.objetivo || '';
 
-                if (manualData.canvas && manualData.canvas.url) {
-                    previewImg.src = manualData.canvas.url;
-                    previewImg.style.display = 'block';
-                    placeholderText.style.display = 'none';
-                }
-
-                renderExistingMarkers();
-                renderPanelList();
+                renderPaginaActual();
                 hasSavedOnce = true;
-                document.getElementById('send-status').textContent = `Editando "${data.title}". Los paneles nuevos se agregan a los ${manualData.paneles.length} ya guardados.`;
+                document.getElementById('send-status').textContent = `Editando "${data.title}". Los paneles nuevos se agregan a los ${currentPagina().paneles.length} ya guardados.`;
             } catch (err) {
                 document.getElementById('send-status').textContent = 'No se pudo cargar el manual: ' + err.message;
             }
         }
         cargarManualExistente();
-        renderPanelList(); // estado inicial (vacío) para un manual nuevo; se sobreescribe si carga uno existente
+        renderPaginaActual(); // estado inicial (vacío) para un manual nuevo; se sobreescribe si carga uno existente
         updateSaveButtonState();
         updateCamposButtonLabel();
 
@@ -1173,7 +1565,7 @@
             const proceeded = await startEditPanel(id);
             if (!proceeded || needsConfirm) return;
 
-            const panel = manualData.paneles.find(p => p.id === id);
+            const panel = currentPagina().paneles.find(p => p.id === id);
             const dotEl = canvasContainer.querySelector(`.existing-marker[data-id="${id}"]`);
             if (!panel || !dotEl) return;
 
@@ -1275,7 +1667,7 @@
             if (editingPanelId) {
                 // Se actualiza el mismo objeto (no se reemplaza) para no perder campos
                 // que este formulario no maneja directo, para que no se pisen entre sí.
-                const panel = manualData.paneles.find(p => p.id === editingPanelId);
+                const panel = currentPagina().paneles.find(p => p.id === editingPanelId);
                 if (!panel) { cancelEditPanel(); return; }
                 panel.color = pColor;
                 panel.origen = { x: cX, y: cY };
@@ -1295,7 +1687,7 @@
                 return;
             }
 
-            if (manualData.paneles.some(p => p.id === pId)) {
+            if (currentPagina().paneles.some(p => p.id === pId)) {
                 await appAlert(`Ya existe un punto con el ID "${pId}". Usa otro id, o edítalo desde la lista "3. Puntos Existentes".`);
                 return;
             }
@@ -1310,7 +1702,7 @@
             if (pResumen) newPanel.resumen = pResumen;
             if (cleanCampos.length) newPanel.campos = cleanCampos;
 
-            manualData.paneles.push(newPanel);
+            currentPagina().paneles.push(newPanel);
             hasUnsavedChanges = true;
 
             // Limpiar formulario para el siguiente
@@ -1327,7 +1719,7 @@
             updateCamposButtonLabel();
             updateSaveButtonState();
 
-            document.getElementById('send-status').textContent = `Punto "${newPanel.titulo}" agregado (${manualData.paneles.length} en total).`;
+            document.getElementById('send-status').textContent = `Punto "${newPanel.titulo}" agregado (${currentPagina().paneles.length} en total).`;
             renderExistingMarkers();
             renderPanelList();
         }
@@ -1338,27 +1730,38 @@
         const btnVerReproductor = document.getElementById('btn-ver-reproductor');
 
         async function subirImagenSiHaceFalta() {
-            if (!imageDirty) return; // ya está subida (o no hay imagen nueva)
-            const file = imageUpload.files[0];
-            if (!file) return;
+            // Sube TODAS las imágenes pendientes (puede haber una por página), no
+            // solo la de la página que esté activa en este momento — por eso se lee
+            // de pendingImages/pendingImagePreviews (guardadas por índice de página
+            // al elegir el archivo) en vez de imageUpload.files[0]/previewImg.src
+            // (que solo reflejan la página que se esté viendo ahora mismo).
+            for (const key of Object.keys(pendingImages)) {
+                const pageIndex = Number(key);
+                const file = pendingImages[pageIndex];
+                const base64 = pendingImagePreviews[pageIndex];
+                if (!file || !base64) continue;
 
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                    action: 'uploadAsset',
-                    trainingId: currentTrainingId,
-                    title: document.getElementById('training-title').value.trim(),
-                    base64: previewImg.src,
-                    mimeType: file.type,
-                    fileName: file.name
-                })
-            });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'uploadAsset',
+                        trainingId: currentTrainingId,
+                        title: document.getElementById('training-title').value.trim(),
+                        base64: base64,
+                        mimeType: file.type,
+                        fileName: file.name
+                    })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
 
-            manualData.canvas = { assetId: data.assetId, url: data.url };
-            imageDirty = false;
+                if (manualData.paginas[pageIndex]) {
+                    manualData.paginas[pageIndex].canvas = { assetId: data.assetId, url: data.url };
+                }
+            }
+            pendingImages = {};
+            pendingImagePreviews = {};
         }
 
         // Intro (splash de Energki + inclinación del documento) más un paso por panel,
@@ -1376,7 +1779,11 @@
             }
             intro.push({ id: 'intro-2', text: 'Comencemos con este manual de entrenamiento.', panelIds: ['portada-3d'] });
 
-            const panelSteps = manualData.paneles.map(p => ({
+            // De TODAS las páginas en orden (no solo la activa): así el guion
+            // narra completa la página 1 antes de mencionar cualquier punto de la
+            // página 2, sin necesitar lógica aparte para eso — es el mismo efecto
+            // que ya se busca en el reproductor.
+            const panelSteps = manualData.paginas.flatMap(pagina => pagina.paneles).map(p => ({
                 id: `step-${p.id}`,
                 text: p.narrativa || p.resumen || p.titulo || p.id,
                 panelIds: [p.id]
@@ -1453,8 +1860,13 @@
                         title: title,
                         status: 'draft',
                         configuracion: manualData.configuracion,
-                        canvas: manualData.canvas,
-                        paneles: manualData.paneles,
+                        paginas: manualData.paginas,
+                        // Compatibilidad: por si algo (backend viejo, u otro código)
+                        // todavía solo entiende "canvas"/"paneles" sueltos en vez de
+                        // "paginas" — se manda la página 1 también ahí, igual que
+                        // antes. api.js ya sabe leer "paginas" directamente.
+                        canvas: manualData.paginas[0] ? manualData.paginas[0].canvas : null,
+                        paneles: manualData.paginas[0] ? manualData.paginas[0].paneles : [],
                         steps: manualData.steps
                     })
                 });
@@ -1465,7 +1877,7 @@
                 history.replaceState(null, '', `?id=${encodeURIComponent(currentTrainingId)}`);
                 hasSavedOnce = true;
                 hasUnsavedChanges = false;
-                sendStatus.textContent = `Guardado (v${data.version}): ${manualData.paneles.length} panel(es).`;
+                sendStatus.textContent = `Guardado (v${data.version}): ${currentPagina().paneles.length} panel(es).`;
             } catch (err) {
                 sendStatus.textContent = 'Error al guardar: ' + err.message;
             }

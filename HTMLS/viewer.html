@@ -197,11 +197,23 @@
             transform-style: preserve-3d;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.6s ease;
+            /* transform también transiciona (2s, mismo timing que .dyn-doc de abajo):
+               el paneo de cámara de .is-3d (ver más abajo) solo debe entrar en efecto
+               JUNTO con la inclinación, no antes — si no, el documento se corre de
+               más mientras todavía está plano (antes de inclinarse no hay nada que
+               compense ese corrimiento, así que se veía cortado). */
+            transition: opacity 0.6s ease, transform 2s cubic-bezier(0.25, 1, 0.5, 1);
         }
         /* Igual que .document-base: visible desde el inicio (plano, 2D), no aparece
            de golpe. Lo único que cambia al llegar a "portada" (is-3d) es el giro. */
         .scene.dynamic-active #dynamic-stage { opacity: 1; }
+        /* Paneo de cámara (44% en X), calibrado a ojo contra el editor: mueve TODO
+           el conjunto en bloque (marco plano + imagen inclinada + pines + tarjetas,
+           ya que #dynamic-overlay-root sigue este rectángulo en vivo, ver
+           syncOverlayRootRect) para compensar el corrimiento de .dyn-doc de abajo y
+           que el documento quede completo y alineado en pantalla. Solo aplica en
+           is-3d, en paralelo con esa misma inclinación — nunca mientras está plano. */
+        .scene.dynamic-active.is-3d #dynamic-stage { transform: translate(-6%, -50%); }
 
         /* Vive fuera de .scene por completo (.scene también tiene su propio
            transform-style:preserve-3d, así que ser hermana DENTRO de .scene no
@@ -226,14 +238,26 @@
             overflow: hidden;
             box-shadow: 0 0 30px rgba(0,0,0,0.8);
             transition: all 2s cubic-bezier(0.25, 1, 0.5, 1);
-            transform: rotateX(0deg) rotateZ(0deg) translateZ(0px);
+            /* translateX/Y en 0 a propósito (aunque no hagan nada aquí): para que
+               la transición hacia .is-3d (que sí las usa, ver abajo) anime cada
+               función por separado en vez de caer a una interpolación de matriz —
+               si las dos listas de transform no tienen la MISMA cantidad/orden de
+               funciones, el navegador no puede interpolarlas función por función y
+               el giro se veía torcido/descuadrado a medio camino. */
+            transform: translateX(0%) translateY(0%) rotateX(0deg) rotateZ(0deg) translateZ(0px);
         }
         /* Igual que .scene.splash-active .document-base: plana y atenuada durante
            la bienvenida, para que no compita visualmente con el modal. */
         .scene.splash-active .dyn-doc { filter: brightness(0.2) blur(5px); }
 
         .scene.dynamic-active.is-3d .dyn-doc {
-            transform: rotateX(55deg) rotateZ(-20deg) translateZ(15px);
+            /* translateX/Y calibrados a ojo contra el editor para que la imagen
+               inclinada quede alineada con el marco plano donde viven las tarjetas
+               — van PRIMERO (se aplican último, ya con la imagen inclinada) para
+               correrla en la pantalla sin tocar el ángulo. Son % del propio
+               ancho/alto de .dyn-doc, así que el mismo número sirve en cualquier
+               tamaño de ventana. */
+            transform: translateX(-43%) translateY(-1%) rotateX(55deg) rotateZ(-20deg) translateZ(15px);
             box-shadow: -30px 40px 50px rgba(0,0,0,0.9);
             filter: brightness(0.85);
         }
@@ -242,7 +266,12 @@
 
         /* Capa plana (sin inclinar) para pines, líneas y tarjetas flotantes */
         .dyn-overlay { position: absolute; inset: 0; }
-        .dyn-overlay-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+        /* overflow:visible es necesario: los <svg> recortan por defecto cualquier
+           cosa que se salga de su propio marco, y las líneas apuntan a tarjetas que
+           a propósito pueden estar posicionadas fuera del 0-100% (afuera del
+           documento) — sin esto, la parte de la línea más allá del borde del SVG
+           desaparecía aunque apuntara bien. */
+        .dyn-overlay-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 
         .dyn-pin {
             position: absolute;
@@ -260,7 +289,7 @@
             position: absolute;
             max-width: 300px;
             /* Solo se centra verticalmente; el lado (izq/der) fija su propio borde
-               (left o right, nunca ambos) para que la tarjeta jamás se salga de la
+               (left o right, nunca ambos) para que la tarjeta jamás se salga de    
                pantalla sin importar qué tan ancha salga según su contenido. */
             transform: translateY(-50%) scale(0.9);
             /* Solo opacity/transform (lo único que cambia .active de aquí abajo).
@@ -559,6 +588,20 @@
         let usingDynamicStage = false;
 
         function renderStep(targetIndex) {
+            // Si el paso al que se va pertenece a OTRA página genérica que la que
+            // está armada en pantalla ahora mismo, se cambia primero — antes de
+            // repetir las activaciones de abajo. Los pasos de páginas anteriores,
+            // al repetirse en ese ciclo (activate() cumulativo desde el 0), ya no
+            // hacen nada (sus pines/tarjetas ya no existen: se reconstruyeron para
+            // la nueva página) — está bien así, solo importa que el panel del paso
+            // ACTUAL quede activo al final. Ver renderPaginaDinamica más abajo.
+            if (targetIndex >= 0) {
+                const targetPage = pageIndexForStep(targetIndex);
+                if (targetPage !== null && targetPage !== activeDynPageIndex) {
+                    renderPaginaDinamica(targetPage);
+                }
+            }
+
             steps.forEach(s => s.deactivate());
 
             for(let i = 0; i <= targetIndex; i++) {
@@ -933,6 +976,48 @@
         // el punto correcto sin importar el ángulo actual del documento.
         const dynItems = [];
 
+        // --- Varias páginas (varias imágenes) por manual ---
+        //
+        // Solo existe UN escenario dinámico en pantalla a la vez (#dynamic-stage,
+        // ver ensureDynamicStage) — al pasar de página se reconstruyen sus pines/
+        // tarjetas/líneas para la nueva, no se crean escenarios nuevos.
+        //
+        // customPaginas: por cada página del manual, sus paneles "genéricos" (id
+        // no reconocido) — los "named" (panel-fabricante, etc.) siguen aparte, con
+        // su propio DOM fijo, ninguno vive en una página.
+        let customPaginas = [];
+        // Qué página está actualmente construida en el DOM (-1 = ninguna aún).
+        let activeDynPageIndex = -1;
+        // { [panelId]: índice de página } — para saber a qué página saltar ANTES
+        // de reproducir el paso de un panel que está en otra página.
+        let panelPageIndex = {};
+        // Activate/deactivate de los paneles genéricos de la página actualmente
+        // construida — se reconstruye en cada renderPaginaDinamica(). Viven aquí
+        // (no dentro de applyEditorData) para que sigan siendo la MISMA función
+        // que ya quedó guardada en cada paso de "steps" (los pasos se arman una
+        // sola vez; lo que cambia con cada página es a qué apunta panelEls).
+        let panelEls = {};
+        function activatePanel(id) {
+            if (namedPanels[id]) namedPanels[id].activate();
+            else if (panelEls[id]) panelEls[id].activate();
+        }
+        function deactivatePanel(id) {
+            if (namedPanels[id]) namedPanels[id].deactivate();
+            else if (panelEls[id]) panelEls[id].deactivate();
+        }
+        // A qué página pertenece el paso "index" (según los paneles genéricos que
+        // menciona) — null si es un paso de la demo original (paneles "named",
+        // que no viven en ninguna página) y por lo tanto no debe disparar cambio
+        // de página.
+        function pageIndexForStep(index) {
+            const step = steps[index];
+            if (!step || !step.panelIds) return null;
+            for (const id of step.panelIds) {
+                if (Object.prototype.hasOwnProperty.call(panelPageIndex, id)) return panelPageIndex[id];
+            }
+            return null;
+        }
+
         // Solo la línea necesita seguimiento constante (el pin se mueve todo el
         // tiempo que dura el giro hacia la portada). La posición de las tarjetas
         // NO depende del instante actual —el giro 3D siempre es el mismo (ver
@@ -983,22 +1068,77 @@
         }
         requestAnimationFrame(syncDynLines);
 
+        // Dado un eje donde el % se convierte a píxeles como
+        // "mapStart + (%/100)*mapSize", devuelve el rango de % permitido para que
+        // el CENTRO de algo (con mitad de tamaño halfSize) quede dentro de
+        // [safeMin, safeMax] con un margen. Si el hueco seguro es más chico que la
+        // propia cosa, colapsa al punto medio en vez de invertir el rango. (Mismo
+        // helper que usa el editor — no hay forma de compartir JS entre estos
+        // archivos sueltos, así que va duplicado.)
+        function pctRangeForSafety(mapStart, mapSize, safeMin, safeMax, halfSize, margin) {
+            if (!mapSize) return [0, 0];
+            let lo = safeMin + margin + halfSize;
+            let hi = safeMax - margin - halfSize;
+            if (lo > hi) { lo = hi = (safeMin + safeMax) / 2; }
+            return [((lo - mapStart) / mapSize) * 100, ((hi - mapStart) / mapSize) * 100];
+        }
+
+        // Los límites de pantalla de abajo (layoutExplicitPopups/layoutDynPopups)
+        // se calculan UNA vez, apenas cargan los datos — antes de que el documento
+        // se incline (el giro 3D llega después, cuando la reproducción avanza a ese
+        // paso). Pero #dynamic-stage se corre con --stage-pan-x/-y en cuanto se
+        // inclina (ver su transform arriba), así que el rectángulo real donde va a
+        // terminar el documento en pantalla NO es el mismo que el que se mide aquí.
+        // Sin corregir esto, una tarjeta cerca del borde del límite calculado
+        // (contra la posición SIN inclinar) podía terminar empujada de más hacia un
+        // lado una vez que el documento se corría con la inclinación — por eso
+        // algunas tarjetas "jalaban" bien y otras no, según qué tan cerca
+        // estuvieran de ese borde. Se simula aquí dónde va a quedar el marco ya
+        // inclinado, para calcular el límite contra ESA posición final.
+        const STAGE_PAN_X_PCT = 44; // debe coincidir con el -6% (= -50%+44%) de #dynamic-stage
+        const STAGE_PAN_Y_PCT = 0;  // debe coincidir con el -50% (sin cambio) de #dynamic-stage
+        function getPannedRect(rect) {
+            const left = rect.left + (STAGE_PAN_X_PCT / 100) * rect.width;
+            const top = rect.top + (STAGE_PAN_Y_PCT / 100) * rect.height;
+            return { left, top, width: rect.width, height: rect.height, right: left + rect.width, bottom: top + rect.height };
+        }
+
         // Tarjetas con posición guardada a mano (panel.tarjeta, puesta desde la
         // Vista Previa 3D del editor): se colocan directo ahí en vez de calcularla.
         // "top"/"left" son el centro exacto que la persona eligió al arrastrarla
-        // (ver .explicit-pos arriba, que centra en los dos ejes). El único ajuste
-        // acá es un límite de seguridad simple para que en un celular angosto no
-        // termine con el centro pegado al borde (el ancho máximo de la tarjeta y
-        // la media query de pantallas chicas ya hacen el resto).
+        // (ver .explicit-pos arriba, que centra en los dos ejes).
         function layoutExplicitPopups(overlayEl, items) {
             if (!items.length) return;
             const overlayRect = overlayEl.getBoundingClientRect();
             if (!overlayRect.height) return;
+            const pannedRect = getPannedRect(overlayRect); // ver nota arriba de getPannedRect
 
             items.forEach(({ popup, line, top, left }) => {
                 try {
-                    const topPct = Math.min(Math.max(top, 5), 95);
-                    const leftPct = Math.min(Math.max(left, 5), 95);
+                    // Se pone primero sin límite, para medir el tamaño real ya
+                    // renderizado de la tarjeta (el límite de abajo depende de eso).
+                    popup.style.top = top + '%';
+                    popup.style.left = left + '%';
+
+                    // Límite real de pantalla (no un margen de % arbitrario como
+                    // antes, [-150,250]): el CENTRO de la tarjeta nunca puede
+                    // quedar fuera de la ventana visible del navegador — mismo
+                    // problema y mismo arreglo que ya se hizo en el editor
+                    // (clampCardPercent): usar los píxeles reales de la pantalla
+                    // en vez de un número de % inventado, que en una ventana
+                    // angosta dejaba una tarjeta "afuera" del documento
+                    // literalmente fuera de la pantalla (inalcanzable/invisible).
+                    // Se calcula contra pannedRect (dónde va a quedar el marco ya
+                    // inclinado), no contra overlayRect (su posición actual, plana).
+                    const cardRect = popup.getBoundingClientRect();
+                    const halfW = cardRect.width / 2;
+                    const halfH = cardRect.height / 2;
+                    const margin = 16;
+                    const [minX, maxX] = pctRangeForSafety(pannedRect.left, pannedRect.width, 0, window.innerWidth, halfW, margin);
+                    const [minY, maxY] = pctRangeForSafety(pannedRect.top, pannedRect.height, 0, window.innerHeight, halfH, margin);
+
+                    const topPct = Math.min(Math.max(top, minY), maxY);
+                    const leftPct = Math.min(Math.max(left, minX), maxX);
                     popup.style.top = topPct + '%';
                     popup.style.left = leftPct + '%';
 
@@ -1012,6 +1152,7 @@
                 }
             });
         }
+
 
         // Acomoda las tarjetas una sola vez (no en cada cuadro): mide su alto real
         // y las apila dentro de un rango vertical ya calibrado a ojo para el giro
@@ -1045,12 +1186,15 @@
             // que hay entre el documento y el borde de la pantalla de ESE lado —
             // calculado de verdad, no adivinado con un ancho de pantalla fijo (eso
             // se salía del campo en tablets, que no son ni celular ni monitor).
+            // Contra pannedRect (dónde va a quedar el marco ya inclinado), no
+            // overlayRect (su posición actual, plana) — ver nota de getPannedRect.
+            const pannedRect = getPannedRect(overlayRect);
             const SAFETY_MARGIN_PX = 16;
-            const spaceLeftPx = Math.max(0, overlayRect.left - SAFETY_MARGIN_PX);
-            const spaceRightPx = Math.max(0, window.innerWidth - overlayRect.right - SAFETY_MARGIN_PX);
+            const spaceLeftPx = Math.max(0, pannedRect.left - SAFETY_MARGIN_PX);
+            const spaceRightPx = Math.max(0, window.innerWidth - pannedRect.right - SAFETY_MARGIN_PX);
             const maxOutPct = {
-                left: (spaceLeftPx / overlayRect.width) * 100,
-                right: (spaceRightPx / overlayRect.width) * 100
+                left: (spaceLeftPx / pannedRect.width) * 100,
+                right: (spaceRightPx / pannedRect.width) * 100
             };
 
             Object.entries(itemsBySide).forEach(([side, list]) => {
@@ -1112,16 +1256,137 @@
             });
         }
 
+        // Construye en el escenario dinámico (único, reutilizado — ver
+        // ensureDynamicStage) los pines/tarjetas/líneas de la página "pageIndex":
+        // limpia lo que hubiera de la página anterior primero. Se llama la
+        // primera vez que se necesita el escenario genérico, y de nuevo cada vez
+        // que la reproducción cruza a otra página (ver pageIndexForStep/renderStep).
+        function renderPaginaDinamica(pageIndex) {
+            const pagina = customPaginas[pageIndex];
+            if (!pagina) return;
+            activeDynPageIndex = pageIndex;
+
+            const stage = ensureDynamicStage();
+            const image = document.getElementById('dynamic-image');
+            const dynDoc = stage.querySelector('.dyn-doc');
+            const overlay = document.getElementById('dyn-overlay');
+            const svg = document.getElementById('dyn-overlay-svg');
+
+            if (pagina.canvas && (pagina.canvas.url || pagina.canvas.imageData)) {
+                image.src = pagina.canvas.url || pagina.canvas.imageData;
+                // El stage se queda en su aspect-ratio fijo (1.4:1); ver nota de ensureDynamicStage.
+            }
+            overlay.innerHTML = '';
+            svg.innerHTML = '';
+            dynDoc.querySelectorAll('.dyn-pin').forEach(el => el.remove());
+            dynItems.length = 0;
+            panelEls = {}; // limpia las referencias de la página anterior (sus elementos ya no existen)
+
+            const customPaneles = pagina.paneles;
+            const sideOf = sidePanelesFor(customPaneles);
+            const itemsBySide = { left: [], right: [] };
+            // Puntos con "tarjeta" guardada a mano (desde la Vista Previa del
+            // editor): se acomodan aparte, directo en su posición — no entran
+            // al apilado automático de itemsBySide.
+            const explicitItems = [];
+
+            customPaneles.forEach(panel => {
+              try {
+                const side = sideOf[panel.id];
+                const color = panel.color || '#00f0ff';
+                const tarjetaTop = panel.tarjeta && parseFloat(panel.tarjeta.top);
+                const tarjetaLeft = panel.tarjeta && parseFloat(panel.tarjeta.left);
+                const hasExplicitPos = isFinite(tarjetaTop) && isFinite(tarjetaLeft);
+
+                // El pin vive DENTRO de .dyn-doc (el elemento que se inclina en 3D),
+                // no en la capa plana: así queda pegado al punto correcto de la
+                // imagen sin importar el ángulo. La línea/tarjeta sí se quedan planas
+                // (legibles); syncDynLines sigue al pin en vivo (ver más arriba).
+                const pin = document.createElement('div');
+                pin.className = 'dyn-pin';
+                pin.style.left = toPercent(panel.origen.x);
+                pin.style.top = toPercent(panel.origen.y);
+                pin.style.background = color;
+                dynDoc.appendChild(pin);
+
+                // x1/y1 los pone syncDynLines en cada cuadro; y2 lo pone
+                // layoutDynPopups una sola vez, junto con la tarjeta.
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('stroke', color);
+                line.setAttribute('stroke-width', '2');
+                line.setAttribute('class', 'dashed-line');
+                svg.appendChild(line);
+                dynItems.push({ pin, line });
+
+                // Se fija el borde (izquierdo o derecho) de la tarjeta, no su centro,
+                // para que nunca se salga de la pantalla sin importar qué tan ancha
+                // salga según su contenido. "top" lo pone layoutDynPopups más abajo.
+                const popup = document.createElement('div');
+                popup.className = hasExplicitPos
+                    ? 'pop-panel dyn-popup explicit-pos'
+                    : `pop-panel dyn-popup side-${side}`;
+                // El offset (izq/der) ya lo pone el CSS de .side-left/.side-right
+                // (así la media query de pantallas angostas lo puede recortar).
+                popup.style.borderColor = color;
+                popup.style.boxShadow = `0 0 25px ${color}55`;
+                popup.innerHTML = renderPopupContent(panel);
+                overlay.appendChild(popup);
+                if (hasExplicitPos) {
+                    explicitItems.push({ popup, line, top: tarjetaTop, left: tarjetaLeft });
+                } else {
+                    itemsBySide[side].push({ popup, line });
+                }
+
+                panelEls[panel.id] = {
+                    activate: () => { pin.classList.add('active'); popup.classList.add('active'); line.classList.add('active'); },
+                    deactivate: () => { pin.classList.remove('active'); popup.classList.remove('active'); line.classList.remove('active'); }
+                };
+              } catch (e) {
+                // Si un punto trae algún dato raro y falla, que no tumbe la
+                // creación de los que siguen.
+                console.error('No se pudo crear el punto', panel && panel.id, e);
+              }
+            });
+
+            layoutDynPopups(overlay, itemsBySide);
+            layoutExplicitPopups(overlay, explicitItems);
+
+            // Vuelve a acomodar una vez que la fuente (Rajdhani, Google Fonts)
+            // termine de cargar de verdad: el cálculo de arriba mide el tamaño
+            // REAL de cada tarjeta ya renderizada para no salirse de pantalla,
+            // pero si en ese instante la fuente aún no había cargado, se medía
+            // con la fuente de repuesto del sistema (tamaño distinto) y esa
+            // medida mala quedaba fija — por eso a veces la posición salía bien
+            // (fuente ya en caché) y a veces un poco desfasada (fuente lenta).
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(() => {
+                    layoutDynPopups(overlay, itemsBySide);
+                    layoutExplicitPopups(overlay, explicitItems);
+                });
+            }
+        }
+
         function applyEditorData(data) {
-            if (!data || !Array.isArray(data.paneles) || data.paneles.length === 0) return;
+            if (!data) return;
+            // Compatibilidad: manuales guardados antes de "paginas" traen
+            // "canvas"/"paneles" sueltos en la raíz, no un arreglo "paginas". Si
+            // no viene "paginas", se arma uno solo con esos datos — se ve y
+            // reproduce exactamente igual que antes, como su única página.
+            const rawPaginas = (Array.isArray(data.paginas) && data.paginas.length)
+                ? data.paginas
+                : (Array.isArray(data.paneles) && data.paneles.length ? [{ canvas: data.canvas, paneles: data.paneles }] : []);
+            if (!rawPaginas.length) return;
 
             while (steps.length > baseStepsCount) steps.pop();
 
             // El documento original (el que se inclina) no tenía imagen real (portada.png
-            // no existe en el proyecto). Si el manual trae una imagen subida, se usa aquí.
+            // no existe en el proyecto). Si el manual trae una imagen subida, se usa aquí
+            // (siempre la de la página 1 — este marco fijo es de la demo original,
+            // aparte del escenario genérico de abajo, que sí soporta varias páginas).
             const docBase = document.getElementById('doc');
-            if (docBase && data.canvas && (data.canvas.url || data.canvas.imageData)) {
-                const src = data.canvas.url || data.canvas.imageData;
+            const firstCanvas = rawPaginas[0] && rawPaginas[0].canvas;
+            if (docBase && firstCanvas && (firstCanvas.url || firstCanvas.imageData)) {
+                const src = firstCanvas.url || firstCanvas.imageData;
                 docBase.style.backgroundImage = `url('${src}')`;
                 docBase.style.backgroundSize = 'contain'; // Muestra la imagen completa, sin recortar ni estirar
                 docBase.style.backgroundRepeat = 'no-repeat';
@@ -1132,104 +1397,29 @@
 
             // Los paneles con id conocido (panel-fabricante, panel-cliente, etc.) reutilizan
             // el DOM/CSS original tal cual, para que se vea idéntico a la demo. Solo los
-            // paneles con id nuevo (de un diagrama distinto) usan el escenario genérico.
-            const customPaneles = data.paneles.filter(p => !namedPanels[p.id]);
-            const panelEls = {};
-            usingDynamicStage = customPaneles.length > 0;
+            // paneles con id nuevo (de un diagrama distinto) usan el escenario genérico —
+            // y ESE sí puede tener varias páginas.
+            customPaginas = rawPaginas.map(pg => ({
+                canvas: pg.canvas,
+                paneles: (pg.paneles || []).filter(p => !namedPanels[p.id])
+            }));
+            panelPageIndex = {};
+            customPaginas.forEach((pg, idx) => {
+                pg.paneles.forEach(p => { panelPageIndex[p.id] = idx; });
+            });
+            usingDynamicStage = customPaginas.some(pg => pg.paneles.length > 0);
+            activeDynPageIndex = -1; // fuerza a reconstruir aunque termine siendo "otra vez la página 0"
 
-            if (customPaneles.length) {
-                const stage = ensureDynamicStage();
-                const image = document.getElementById('dynamic-image');
-                const dynDoc = stage.querySelector('.dyn-doc');
-                const overlay = document.getElementById('dyn-overlay');
-                const svg = document.getElementById('dyn-overlay-svg');
-                if (data.canvas && (data.canvas.url || data.canvas.imageData)) {
-                    const dynSrc = data.canvas.url || data.canvas.imageData;
-                    image.src = dynSrc;
-                    // El stage se queda en su aspect-ratio fijo (1.4:1); ver nota arriba.
-                }
-                overlay.innerHTML = '';
-                svg.innerHTML = '';
-                dynDoc.querySelectorAll('.dyn-pin').forEach(el => el.remove());
-                dynItems.length = 0;
-
-                const sideOf = sidePanelesFor(customPaneles);
-                const itemsBySide = { left: [], right: [] };
-                // Puntos con "tarjeta" guardada a mano (desde la Vista Previa del
-                // editor): se acomodan aparte, directo en su posición — no entran
-                // al apilado automático de itemsBySide.
-                const explicitItems = [];
-
-                customPaneles.forEach(panel => {
-                  try {
-                    const side = sideOf[panel.id];
-                    const color = panel.color || '#00f0ff';
-                    const tarjetaTop = panel.tarjeta && parseFloat(panel.tarjeta.top);
-                    const tarjetaLeft = panel.tarjeta && parseFloat(panel.tarjeta.left);
-                    const hasExplicitPos = isFinite(tarjetaTop) && isFinite(tarjetaLeft);
-
-                    // El pin vive DENTRO de .dyn-doc (el elemento que se inclina en 3D),
-                    // no en la capa plana: así queda pegado al punto correcto de la
-                    // imagen sin importar el ángulo. La línea/tarjeta sí se quedan planas
-                    // (legibles); syncDynLines sigue al pin en vivo (ver más arriba).
-                    const pin = document.createElement('div');
-                    pin.className = 'dyn-pin';
-                    pin.style.left = toPercent(panel.origen.x);
-                    pin.style.top = toPercent(panel.origen.y);
-                    pin.style.background = color;
-                    dynDoc.appendChild(pin);
-
-                    // x1/y1 los pone syncDynLines en cada cuadro; y2 lo pone
-                    // layoutDynPopups una sola vez, junto con la tarjeta.
-                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    line.setAttribute('stroke', color);
-                    line.setAttribute('stroke-width', '2');
-                    line.setAttribute('class', 'dashed-line');
-                    svg.appendChild(line);
-                    dynItems.push({ pin, line });
-
-                    // Se fija el borde (izquierdo o derecho) de la tarjeta, no su centro,
-                    // para que nunca se salga de la pantalla sin importar qué tan ancha
-                    // salga según su contenido. "top" lo pone layoutDynPopups más abajo.
-                    const popup = document.createElement('div');
-                    popup.className = hasExplicitPos
-                        ? 'pop-panel dyn-popup explicit-pos'
-                        : `pop-panel dyn-popup side-${side}`;
-                    // El offset (izq/der) ya lo pone el CSS de .side-left/.side-right
-                    // (así la media query de pantallas angostas lo puede recortar).
-                    popup.style.borderColor = color;
-                    popup.style.boxShadow = `0 0 25px ${color}55`;
-                    popup.innerHTML = renderPopupContent(panel);
-                    overlay.appendChild(popup);
-                    if (hasExplicitPos) {
-                        explicitItems.push({ popup, line, top: tarjetaTop, left: tarjetaLeft });
-                    } else {
-                        itemsBySide[side].push({ popup, line });
-                    }
-
-                    panelEls[panel.id] = {
-                        activate: () => { pin.classList.add('active'); popup.classList.add('active'); line.classList.add('active'); },
-                        deactivate: () => { pin.classList.remove('active'); popup.classList.remove('active'); line.classList.remove('active'); }
-                    };
-                  } catch (e) {
-                    // Si un punto trae algún dato raro y falla, que no tumbe la
-                    // creación de los que siguen.
-                    console.error('No se pudo crear el punto', panel && panel.id, e);
-                  }
-                });
-
-                layoutDynPopups(overlay, itemsBySide);
-                layoutExplicitPopups(overlay, explicitItems);
+            if (usingDynamicStage) {
+                const firstIndexWithContent = customPaginas.findIndex(pg => pg.paneles.length > 0);
+                renderPaginaDinamica(firstIndexWithContent >= 0 ? firstIndexWithContent : 0);
             }
 
-            function activatePanel(id) {
-                if (namedPanels[id]) namedPanels[id].activate();
-                else if (panelEls[id]) panelEls[id].activate();
-            }
-            function deactivatePanel(id) {
-                if (namedPanels[id]) namedPanels[id].deactivate();
-                else if (panelEls[id]) panelEls[id].deactivate();
-            }
+            // Todos los paneles genéricos de TODAS las páginas, EN ORDEN — para el
+            // guion de abajo (tanto para completar pasos que falten como para el
+            // caso sin guion propio). El orden por página es justo lo que hace que
+            // la narración termine la página 1 antes de mencionar la 2.
+            const allCustomPaneles = customPaginas.flatMap(pg => pg.paneles);
 
             if (Array.isArray(data.steps) && data.steps.length) {
                 data.steps
@@ -1239,6 +1429,7 @@
                         const panelIds = step.panelIds || [];
                         steps.push({
                             text: step.text || '',
+                            panelIds,
                             activate: () => panelIds.forEach(activatePanel),
                             deactivate: () => panelIds.forEach(deactivatePanel)
                         });
@@ -1248,18 +1439,20 @@
                 // menciona: se muestran igual, como pasos extra al final.
                 const referenced = new Set();
                 data.steps.forEach(s => (s.panelIds || []).forEach(id => referenced.add(id)));
-                const unreferenced = data.paneles.filter(p => !referenced.has(p.id));
+                const unreferenced = allCustomPaneles.filter(p => !referenced.has(p.id));
                 unreferenced.forEach(panel => {
                     steps.push({
                         text: panel.narrativa || panel.titulo || panel.id,
+                        panelIds: [panel.id],
                         activate: () => activatePanel(panel.id),
                         deactivate: () => deactivatePanel(panel.id)
                     });
                 });
             } else {
-                data.paneles.forEach(panel => {
+                allCustomPaneles.forEach(panel => {
                     steps.push({
                         text: panel.narrativa || panel.titulo || panel.id,
+                        panelIds: [panel.id],
                         activate: () => activatePanel(panel.id),
                         deactivate: () => deactivatePanel(panel.id)
                     });
