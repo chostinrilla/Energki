@@ -1665,11 +1665,18 @@
         // planear, con la misma lógica de tiempos que usa el reproductor sin
         // voz: ~70ms por carácter narrado + 1s de pausa después de cada paso,
         // más el tiempo fijo de cada inclinación/pausa entre imágenes (deben
-        // coincidir con TILT_MS/PAGE_TRANSITION_PAUSE_MS en viewer.html).
+        // coincidir con TILT_MS/PAGE_TRANSITION_PAUSE_MS/OUTGOING_PAGE_PAUSE_MS
+        // en viewer.html).
         const DURATION_MS_PER_CHAR = 70;
         const DURATION_STEP_PAUSE_MS = 1000;
         const DURATION_TILT_MS = 2000;
         const DURATION_PAGE_PAUSE_MS = 1800;
+        // Al dejar una página YA inclinada por otra distinta, el reproductor
+        // se detiene un momento en plano ANTES de cambiar la imagen (para que
+        // esa página se alcance a apreciar ya limpia) — antes esto no se
+        // contaba aquí, así que el estimado se quedaba corto en cualquier
+        // manual de más de una página con puntos.
+        const DURATION_OUTGOING_PAGE_PAUSE_MS = 2000;
 
         function estimateStepMs(text) {
             const clean = (text || '').trim();
@@ -1686,21 +1693,35 @@
             if (objetivo) total += estimateStepMs(objetivo);
             total += estimateStepMs('Comencemos con este manual de entrenamiento.');
 
+            // true en cuanto se procesó una página con puntos (ya se inclinó
+            // alguna vez) — así, si la página 1 llegara a estar vacía, la
+            // primera página que SÍ tenga puntos no arrastra de más una pausa
+            // de "dejar la página anterior" que en realidad nunca ocurrió.
+            let hasShownTiltedPage = false;
             manualData.paginas.forEach((pagina, idx) => {
                 if (!pagina.paneles.length) return; // página sin puntos todavía: no aporta tiempo de reproducción real
 
+                if (hasShownTiltedPage) total += DURATION_OUTGOING_PAGE_PAUSE_MS;
+
+                // El "contexto" solo existe para páginas 2 en adelante (idx > 0)
+                // — la página 1 usa "objetivo" en su lugar (ver
+                // ensurePaginaContextSteps/buildAutoSteps) — esto es aparte de
+                // si hubo o no una página anterior YA inclinada (hasShownTiltedPage),
+                // que es lo que decide la pausa de arriba/abajo.
                 const contexto = idx > 0 ? (pagina.contexto || '').trim() : '';
                 if (contexto) {
                     total += estimateStepMs(contexto) + DURATION_TILT_MS;
-                } else if (idx > 0) {
+                } else if (hasShownTiltedPage) {
                     total += DURATION_PAGE_PAUSE_MS + DURATION_TILT_MS;
                 } else {
-                    total += DURATION_TILT_MS; // página 1: la inclinación llega justo tras "Comencemos"
+                    total += DURATION_TILT_MS; // primera página con puntos: la inclinación llega justo tras "Comencemos"
                 }
 
                 pagina.paneles.forEach(p => {
                     total += estimateStepMs(p.narrativa || p.resumen || p.titulo || p.id);
                 });
+
+                hasShownTiltedPage = true;
             });
 
             return total;

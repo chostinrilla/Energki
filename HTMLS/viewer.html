@@ -210,6 +210,30 @@
 
         #dynamic-image { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
 
+        /* Se muestra SOLO mientras se espera a que la imagen de la siguiente
+           página termine de descargar (se sirve por un proxy a Drive, no un
+           link público — la primera vez que hace falta puede tardar más que
+           el fundido de 280ms). Sin esto, esa espera se veía como un vacío
+           negro sin explicación; con el spinner se lee como "cargando", no
+           como que algo se rompió. Vive fuera de .dyn-doc (nunca se inclina),
+           como hermana suya dentro de #dynamic-stage. */
+        .dyn-loading {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+        }
+        .dyn-loading.is-visible { opacity: 1; }
+        .dyn-loading-spinner {
+            width: 36px; height: 36px;
+            border: 3px solid rgba(0, 240, 255, 0.25);
+            border-top-color: #00f0ff;
+            border-radius: 50%;
+            animation: dyn-loading-spin 0.8s linear infinite;
+        }
+        @keyframes dyn-loading-spin { to { transform: rotate(360deg); } }
+
         /* Capa plana (sin inclinar) para pines, líneas y tarjetas flotantes */
         .dyn-overlay { position: absolute; inset: 0; }
         /* overflow:visible es necesario: los <svg> recortan por defecto cualquier
@@ -444,10 +468,10 @@
             // Si el paso al que se va pertenece a OTRA página genérica que la que
             // está armada en pantalla ahora mismo, se cambia primero — antes de
             // repetir las activaciones de abajo. Los pasos de páginas anteriores,
-            // al repetirse en ese ciclo (activate() cumulativo desde el 0), ya no
-            // hacen nada (sus pines/tarjetas ya no existen: se reconstruyeron para
-            // la nueva página) — está bien así, solo importa que el panel del paso
-            // ACTUAL quede activo al final. Ver renderPaginaDinamica más abajo.
+            // al repetirse en ese ciclo (activate() cumulativo desde el 0), se
+            // saltan a propósito (ver el filtro de página más abajo) — solo
+            // importa que el panel del paso ACTUAL quede activo al final. Ver
+            // renderPaginaDinamica más abajo.
             if (targetIndex >= 0) {
                 const targetPage = pageIndexForStep(targetIndex);
                 if (targetPage !== null && targetPage !== activeDynPageIndex) {
@@ -471,7 +495,19 @@
             steps.forEach(s => s.deactivate());
 
             for(let i = 0; i <= targetIndex; i++) {
-                if(i >= 0 && steps[i]) steps[i].activate();
+                if (i < 0 || !steps[i]) continue;
+                // Un paso de una página que YA NO es la actual no debe
+                // reactivar sus pines/tarjetas. En teoría no hace nada (sus
+                // elementos "ya no existen"), pero el cambio de página real
+                // tarda un instante (el fundido de renderPaginaDinamica,
+                // 280ms) — durante esa ventana esos elementos SÍ siguen en el
+                // DOM todavía, recién apagados. Si esta activación cumulativa
+                // los reactivaba justo ahí, el navegador alcanzaba a pintar un
+                // cuadro con esos puntos "reviviendo" antes de ser destruidos
+                // — el parpadeo sucio que se veía al cambiar de imagen.
+                const stepPage = pageIndexForStep(i);
+                if (stepPage !== null && stepPage !== activeDynPageIndex) continue;
+                steps[i].activate();
             }
 
             scene.classList.toggle('dynamic-active', usingDynamicStage && targetIndex >= baseStepsCount);
@@ -737,14 +773,24 @@
         // punto no debe aparecer AL MISMO TIEMPO que se inclina, sino hasta que
         // termine de inclinarse.
         const TILT_MS = 2000;
+        // Cuánto se ve la página que se está DEJANDO ya plana y limpia (sin
+        // tarjetas) antes de cambiar a la imagen de la siguiente — sin este
+        // respiro, el cambio de imagen pasaba casi al mismo tiempo que el giro
+        // de vuelta a 2D, y esa página nunca se alcanzaba a apreciar ya plana.
+        const OUTGOING_PAGE_PAUSE_MS = 2000;
 
-        // Ciclo de 3 posiciones por página (plana -> inclinada -> aparece el
-        // punto): cada AVANCE —un clic de Adelantar, o un tic del reproductor
-        // automático— muestra UNA posición a la vez, no las tres de un jalón
-        // (así lo pidieron). dynPendingPhase lleva la cuenta:
-        //   null    = nada pendiente, avance normal de un paso.
-        //   'flat'  = ya se cambió/mostró la imagen plana, falta inclinarla.
-        //   'tilted'= ya se inclinó, falta prender el primer punto (dynPendingIndex).
+        // Ciclo de posiciones por página (plana -> inclinada -> aparece el
+        // punto), con un paso extra al CRUZAR de una página tilted a otra
+        // distinta: cada AVANCE —un clic de Adelantar, o un tic del
+        // reproductor automático— muestra UNA posición a la vez, no todas de
+        // un jalón (así lo pidieron). dynPendingPhase lleva la cuenta:
+        //   null      = nada pendiente, avance normal de un paso.
+        //   'leaving' = la página vieja ya volvió a plano (sin tarjetas), pero
+        //               todavía no se cambia a la imagen de la nueva página —
+        //               solo aplica al cruzar de una página YA inclinada a
+        //               otra distinta (ver needsTransition en stepForward).
+        //   'flat'    = ya se cambió/mostró la imagen plana, falta inclinarla.
+        //   'tilted'  = ya se inclinó, falta prender el primer punto (dynPendingIndex).
         // Solo Adelantar/Play pasan por este ciclo; Regresar salta directo (ver
         // goPrev) — no se pidió una versión "al revés" de la animación.
         let dynPendingPhase = null;
@@ -752,7 +798,72 @@
 
         // isAuto=true: se llama sola por temporizador (Play). isAuto=false: la
         // llama un clic de Adelantar, avanza una sola posición y se detiene ahí.
+        // Cambia de verdad a la imagen de "nextPage" (si hace falta) y deja
+        // la fase en 'flat', armando su temporizador si isAuto — factorizado
+        // porque tanto needsTransition como la fase 'leaving' de arriba
+        // necesitan hacer exactamente esto, solo que en momentos distintos.
+        function goToFlatPage(nextIndex, nextPage, alreadyOnPage, isAuto) {
+            if (!alreadyOnPage) renderPaginaDinamica(nextPage);
+            scene.classList.toggle('dynamic-active', usingDynamicStage);
+
+            dynPendingIndex = nextIndex;
+            dynPendingPhase = 'flat';
+
+            if (alreadyOnPage) {
+                // La Posición 1 ya se vio (contexto/objetivo) — se consume esa
+                // fase de inmediato, sin esperar, y se pasa a inclinar.
+                stepForward(isAuto);
+                return;
+            }
+
+            if (isAuto) {
+                clearTimeout(autoPlayTimer);
+                autoPlayTimer = setTimeout(() => { if (isPlaying) stepForward(true); }, PAGE_TRANSITION_PAUSE_MS);
+            }
+        }
+
+        // Muestra el paso "nextIndex" directo, sin pasar por el ciclo
+        // plano/inclinado — para el "contexto" de una página (plano, con su
+        // propia narración de duración real; la inclinación llega después,
+        // con el primer punto). Factorizado: lo usan tanto el cruce normal a
+        // un contexto como la fase 'leaving' cuando resulta que el paso que
+        // sigue es un contexto y no un punto.
+        function goToContextStep(nextIndex, nextPage, isAuto) {
+            if (nextPage !== activeDynPageIndex) renderPaginaDinamica(nextPage);
+            scene.classList.toggle('dynamic-active', usingDynamicStage);
+            currentStep = nextIndex;
+            renderStep(currentStep); // deja is-3d apagado (stepWantsTilt es false para este paso)
+            if (isAuto) playCurrentStep(); else showStepPreview(currentStep);
+        }
+
+        // Entra a la fase 'leaving' (página vieja ya plana, esperando antes
+        // de cambiar de imagen) — factorizado porque tanto el cruce a un
+        // punto como el cruce a un contexto necesitan este mismo respiro.
+        function enterLeavingPhase(nextIndex, isAuto) {
+            dynPendingIndex = nextIndex;
+            dynPendingPhase = 'leaving';
+            if (isAuto) {
+                clearTimeout(autoPlayTimer);
+                autoPlayTimer = setTimeout(() => { if (isPlaying) stepForward(true); }, OUTGOING_PAGE_PAUSE_MS);
+            }
+        }
+
         function stepForward(isAuto) {
+            if (dynPendingPhase === 'leaving') {
+                const nextIndex = dynPendingIndex;
+                dynPendingPhase = null;
+                dynPendingIndex = null;
+                const nextPage = pageIndexForStep(nextIndex);
+                // El paso que sigue puede ser un punto (se inclina) o el
+                // "contexto" de la nueva página (se queda plano) — se decide
+                // aquí, ya con la página vieja fuera del camino.
+                if (stepWantsTilt(nextIndex)) {
+                    goToFlatPage(nextIndex, nextPage, false, isAuto);
+                } else {
+                    goToContextStep(nextIndex, nextPage, isAuto);
+                }
+                return;
+            }
             if (dynPendingPhase === 'flat') {
                 scene.classList.add('is-3d');
                 dynTiltActive = true;
@@ -806,17 +917,21 @@
             // fija: dura lo que dure narrarlo, igual que el objetivo de la
             // página 1. La inclinación llega después, con el primer punto.
             if (nextPage !== null && !nextWantsTilt) {
+                const wasTilted = dynTiltActive;
                 if (dynTiltActive) {
                     scene.classList.remove('is-3d');
                     dynTiltActive = false;
                     Object.values(panelEls).forEach(p => p.deactivate());
                     subtitleBox.innerHTML = '';
                 }
-                if (nextPage !== activeDynPageIndex) renderPaginaDinamica(nextPage);
-                scene.classList.toggle('dynamic-active', usingDynamicStage);
-                currentStep = nextIndex;
-                renderStep(currentStep); // deja is-3d apagado (stepWantsTilt es false para este paso)
-                if (isAuto) playCurrentStep(); else showStepPreview(currentStep);
+                // Mismo respiro que needsTransition más abajo: si de verdad se
+                // deja una página inclinada por otra distinta, un momento en
+                // plano antes de cambiar la imagen.
+                if (wasTilted && nextPage !== activeDynPageIndex) {
+                    enterLeavingPhase(nextIndex, isAuto);
+                    return;
+                }
+                goToContextStep(nextIndex, nextPage, isAuto);
                 return;
             }
 
@@ -832,6 +947,7 @@
                 // objetivo si es la página 1) — no hace falta la pausa fija de
                 // nuevo, se pasa directo a inclinar.
                 const alreadyOnPage = nextPage === activeDynPageIndex;
+                const wasTilted = dynTiltActive;
 
                 // Posición 3 de la página que se deja (si veníamos inclinados de
                 // otra): vuelve a plano, se apagan SOLO sus tarjetas (no todos los
@@ -843,25 +959,19 @@
                     Object.values(panelEls).forEach(p => p.deactivate());
                     subtitleBox.innerHTML = ''; // no dejar el texto del último punto "pegado" mientras se ve la imagen sola
                 }
-                // Posición 1 de la nueva página (si no se había mostrado ya vía
-                // su contexto): cambia la imagen ya, se ve plana.
-                if (!alreadyOnPage) renderPaginaDinamica(nextPage);
-                scene.classList.toggle('dynamic-active', usingDynamicStage);
 
-                dynPendingIndex = nextIndex;
-                dynPendingPhase = 'flat';
-
-                if (alreadyOnPage) {
-                    // La Posición 1 ya se vio (contexto/objetivo) — se consume esa
-                    // fase de inmediato, sin esperar, y se pasa a inclinar.
-                    stepForward(isAuto);
+                // Si de verdad se deja una página YA inclinada por otra
+                // distinta, se detiene un momento viéndola ya plana y limpia
+                // ANTES de cambiar la imagen — si el cambio pasara aquí mismo
+                // (como antes), la página vieja nunca se alcanzaba a apreciar
+                // ya plana: el giro de vuelta a 2D y el cambio de imagen
+                // ocurrían casi al mismo tiempo.
+                if (wasTilted && !alreadyOnPage) {
+                    enterLeavingPhase(nextIndex, isAuto);
                     return;
                 }
 
-                if (isAuto) {
-                    clearTimeout(autoPlayTimer);
-                    autoPlayTimer = setTimeout(() => { if (isPlaying) stepForward(true); }, PAGE_TRANSITION_PAUSE_MS);
-                }
+                goToFlatPage(nextIndex, nextPage, alreadyOnPage, isAuto);
                 return;
             }
 
@@ -1021,7 +1131,7 @@
                 // sin heredar ese contexto 3D — así siempre quedan encima.
                 stage = document.createElement('div');
                 stage.id = 'dynamic-stage';
-                stage.innerHTML = `<div class="dyn-doc"><img id="dynamic-image" alt="Panel del manual"></div>`;
+                stage.innerHTML = `<div class="dyn-doc"><img id="dynamic-image" alt="Panel del manual"></div><div class="dyn-loading" id="dyn-loading"><div class="dyn-loading-spinner"></div></div>`;
                 scene.appendChild(stage);
 
                 const overlayRoot = document.createElement('div');
@@ -1530,7 +1640,31 @@
             setTimeout(() => {
                 if (myToken !== dynSwapToken) return; // se pidió otra página mientras tanto
                 buildPaginaDinamicaContent(pagina, stage, dynDoc, overlay, svg);
-                [image, overlay, svg].forEach(el => { el.style.opacity = '1'; });
+
+                // Antes de revelar, hay que estar seguros de que la imagen NUEVA
+                // ya esté lista — un <img> no se pone en blanco solo por
+                // cambiarle el src, sigue mostrando la imagen VIEJA hasta que la
+                // nueva termine de cargar. Gracias a la precarga de arriba
+                // (applyEditorData) esto casi siempre es instantáneo, pero por
+                // si acaso (red lenta, manual recién abierto) se espera al
+                // evento real en vez de asumir que ya está lista.
+                const loadingIndicator = stage.querySelector('.dyn-loading');
+                const reveal = () => {
+                    if (myToken !== dynSwapToken) return;
+                    if (loadingIndicator) loadingIndicator.classList.remove('is-visible');
+                    [image, overlay, svg].forEach(el => { el.style.opacity = '1'; });
+                };
+                if (image.complete) {
+                    reveal();
+                } else {
+                    // Genuinamente hay que esperar (no estaba precargada a
+                    // tiempo) — recién AQUÍ se muestra el spinner, para que una
+                    // imagen ya en caché (el caso normal) nunca lo llegue a ver.
+                    if (loadingIndicator) loadingIndicator.classList.add('is-visible');
+                    image.addEventListener('load', reveal, { once: true });
+                    image.addEventListener('error', reveal, { once: true });
+                    setTimeout(reveal, 3000); // tope de seguridad: nunca dejarla invisible para siempre
+                }
             }, FADE_MS);
         }
 
@@ -1559,6 +1693,23 @@
             customPaginas.forEach((pg, idx) => {
                 pg.paneles.forEach(p => { panelPageIndex[p.id] = idx; });
             });
+
+            // Precarga TODAS las imágenes de página desde ya, en cuanto se
+            // conoce el manual — no hasta que la reproducción realmente
+            // cruza a esa página. Cada imagen se sirve por un proxy (Drive vía
+            // la función de Netlify), así que la PRIMERA vez que el navegador
+            // la necesita de verdad puede tardar más de lo que dura el fundido
+            // de transición (280ms) — mientras tanto un <img> sigue mostrando
+            // su contenido VIEJO (no se pone en blanco solo por cambiarle el
+            // src), así que se veía como si "tardara en cambiar de imagen"
+            // después del parpadeo. Con esto, para cuando la reproducción de
+            // verdad llega a esa página, la imagen casi siempre ya está en la
+            // caché del navegador y el cambio es instantáneo.
+            customPaginas.forEach(pg => {
+                const url = pg.canvas && (pg.canvas.url || pg.canvas.imageData);
+                if (url) { const preloadImg = new Image(); preloadImg.src = url; }
+            });
+
             usingDynamicStage = customPaginas.some(pg => pg.paneles.length > 0);
             activeDynPageIndex = -1; // fuerza a reconstruir aunque termine siendo "otra vez la página 0"
 
