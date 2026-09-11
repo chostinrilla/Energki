@@ -370,6 +370,7 @@
         .icon-btn-sm img { width: 15px; height: 15px; }
 
         .color-swatch {
+            display: inline-block;
             width: 26px; height: 26px; border-radius: 4px;
             border: 1px solid rgba(255,255,255,0.3);
             flex-shrink: 0;
@@ -378,9 +379,6 @@
             transition: transform 0.15s;
         }
         .color-swatch:hover { transform: scale(1.1); }
-
-        .id-color-row { display: flex; align-items: center; gap: 8px; }
-        .id-color-row input[type="text"] { flex: 1; min-width: 0; }
 
         /* --- BOTÓN DE ARCHIVO (reemplaza el input nativo del navegador) --- */
         .visually-hidden {
@@ -581,26 +579,23 @@
         <div>
             <h3 id="panel-form-title">2. Crear Nuevo Panel</h3>
             <p id="edit-mode-banner">Editando un punto existente. Haz clic en la imagen para moverlo de lugar.</p>
-            <p style="font-size: 12px; color: #888; margin: 0 0 10px 0;">Haz clic en la imagen a la derecha para obtener las coordenadas de origen.</p>
+            <p style="font-size: 12px; color: #888; margin: 0 0 10px 0;">Haz clic en la imagen a la derecha para obtener las coordenadas de origen, o escríbelas directo abajo.</p>
 
             <div class="coord-box">
                 <div class="form-group">
                     <label>Origen X (%)</label>
-                    <input type="text" id="coord-x" readonly placeholder="Clic en la imagen">
+                    <input type="text" id="coord-x" inputmode="decimal" placeholder="Coordenada en eje X">
                 </div>
                 <div class="form-group">
                     <label>Origen Y (%)</label>
-                    <input type="text" id="coord-y" readonly placeholder="Clic en la imagen">
+                    <input type="text" id="coord-y" inputmode="decimal" placeholder="Coordenada en eje Y">
                 </div>
             </div>
 
             <div class="form-group" style="margin-top: 10px;">
-                <label>ID identificador del panel</label>
-                <div class="id-color-row">
-                    <input type="text" id="panel-id" placeholder="Sin espacios">
-                    <label for="panel-color" id="color-preview" class="color-swatch" title="Elegir color temático" aria-label="Elegir color temático" style="background:#00f0ff;"></label>
-                    <input type="color" id="panel-color" value="#00f0ff" class="visually-hidden">
-                </div>
+                <label>Color del punto</label>
+                <label for="panel-color" id="color-preview" class="color-swatch" title="Elegir color temático" aria-label="Elegir color temático" style="background:#00f0ff;"></label>
+                <input type="color" id="panel-color" value="#00f0ff" class="visually-hidden">
             </div>
 
             <div class="form-group" style="margin-top: 10px;">
@@ -811,6 +806,13 @@
         // crea hasta que de verdad se elige un archivo, para no dejar una hoja
         // vacía y fea si cancela el selector.
         let pendingNewPage = false;
+        // assetId de Drive de cualquier imagen que dejó de usarse (se reemplazó,
+        // se borró su página, o se borró la imagen de la única página) — se
+        // manda a la papelera de Drive recién cuando el guardado que confirma
+        // ese cambio SÍ tiene éxito (ver trashPendingAssets, llamado al final de
+        // guardarManual). Si nunca se guarda, no se toca Drive: el manual
+        // guardado en el servidor todavía apunta a la imagen vieja.
+        let assetIdsToTrash = [];
         let hasUnsavedChanges = false; // true si hay cambios que "Ver Reproductor" no reflejaría (aún no guardados)
         let hasSavedOnce = false; // true en cuanto existe alguna versión guardada en el servidor
         let formIsDirty = false; // true si el formulario de "Crear/Editar Panel" tiene cambios que no se han confirmado con su propio botón Guardar
@@ -829,6 +831,43 @@
         const coordXInput = document.getElementById('coord-x');
         const coordYInput = document.getElementById('coord-y');
 
+        // Mismo resultado que hacer clic en la imagen, pero "al revés": escribir
+        // directo el % en vez de hacer clic para obtenerlo — útil para dejar dos
+        // puntos exactamente alineados en un eje (mismo X o mismo Y a mano). El
+        // marcador (#marker) se mueve en vivo mientras se escribe, EXACTAMENTE
+        // igual que con el clic (mismo botón Guardar/Cancelar de siempre aplica
+        // la posición al panel — esto no cambia nada de ese flujo, solo agrega
+        // otra forma de llenar los mismos dos campos).
+        function updateMarkerFromCoordInputs() {
+            const xVal = parseFloat(coordXInput.value);
+            const yVal = parseFloat(coordYInput.value);
+            if (!isFinite(xVal) || !isFinite(yVal)) return; // espera a que los dos campos tengan un número
+            const xPercent = Math.max(0, Math.min(100, xVal));
+            const yPercent = Math.max(0, Math.min(100, yVal));
+            marker.style.left = `${xPercent}%`;
+            marker.style.top = `${yPercent}%`;
+            marker.style.display = 'block';
+            btnCancelEdit.style.display = 'inline-flex';
+            formIsDirty = true;
+            updateSaveButtonState();
+        }
+        // Al salir del campo, se le agrega el "%" y se deja con un decimal — el
+        // marcador ya se movió en vivo mientras escribía (arriba); esto solo
+        // pone el texto bonito y con el formato que addPanel()/panel.origen
+        // necesitan (dot.style.left lo usa tal cual como valor CSS).
+        function normalizeCoordInput(inputEl) {
+            const val = parseFloat(inputEl.value);
+            if (!isFinite(val)) { inputEl.value = ''; return; }
+            inputEl.value = `${Math.max(0, Math.min(100, val)).toFixed(1)}%`;
+        }
+        [coordXInput, coordYInput].forEach(input => {
+            input.addEventListener('input', updateMarkerFromCoordInputs);
+            input.addEventListener('blur', () => {
+                normalizeCoordInput(input);
+                updateMarkerFromCoordInputs();
+            });
+        });
+
         const panelColorInput = document.getElementById('panel-color');
         const colorPreview = document.getElementById('color-preview');
         panelColorInput.addEventListener('input', () => { colorPreview.style.background = panelColorInput.value; formIsDirty = true; });
@@ -836,7 +875,7 @@
         // Cualquier cambio en el formulario del punto (crear/editar) cuenta como
         // "pendiente" hasta que se confirme con el botón Guardar de esa sección.
         ['panel-titulo', 'panel-resumen', 'panel-voice'].forEach(fieldId => {
-            document.getElementById(fieldId).addEventListener('input', () => { formIsDirty = true; });
+            document.getElementById(fieldId).addEventListener('input', () => { formIsDirty = true; updateSaveButtonState(); });
         });
 
         // 1. Manejar subida de imagen
@@ -916,6 +955,19 @@
                 // pegado a la imagen cuando se inclina en Vista Previa.
                 canvasTilt.appendChild(dot);
             });
+
+            // Vista Previa 3D guarda en previewItems una referencia directa al
+            // pin (pinEl) de cada punto para seguir su línea en vivo (ver
+            // syncPreviewLines) — como arriba se acaban de BORRAR y RECREAR
+            // TODOS los pines de cero, esas referencias quedan apuntando a
+            // nodos ya fuera del documento (su getBoundingClientRect() da
+            // 0,0,0,0), y la línea "saltaba" hacia la esquina superior
+            // izquierda del navegador. Se reconstruye la vista previa (si está
+            // activa) para que tome los pines nuevos. Antes esto solo se hacía
+            // a mano en un par de casos (borrar/guardar un punto); ahora cubre
+            // TODOS los casos que recrean pines (por ejemplo, seleccionar un
+            // punto para editar), sin tener que acordarse en cada uno.
+            if (canvasContainer.classList.contains('preview-mode')) renderPreviewCards();
         }
 
         // --- Vista Previa 3D: mismo giro que el reproductor, para colocar/mover
@@ -1226,15 +1278,16 @@
         const panelFormTitle = document.getElementById('panel-form-title');
         const btnSavePanel = document.getElementById('btn-save-panel');
         const btnCancelEdit = document.getElementById('btn-cancel-edit');
-        const panelIdInput = document.getElementById('panel-id');
 
         // El botón de guardar solo se activa cuando hay algo real que guardar
-        // (id del punto + coordenadas), igual que el de cancelar se muestra/oculta.
+        // (título + coordenadas), igual que el de cancelar se muestra/oculta. El
+        // id interno del punto (antes un campo de texto aquí) ahora se genera
+        // solo (ver generatePanelId) — nunca lo usa nadie a mano, así que el
+        // título pasa a ser el dato que identifica al punto para quien lo edita.
         function updateSaveButtonState() {
-            const ready = panelIdInput.value.trim() && coordXInput.value && coordYInput.value;
+            const ready = document.getElementById('panel-titulo').value.trim() && coordXInput.value && coordYInput.value;
             btnSavePanel.disabled = !ready;
         }
-        panelIdInput.addEventListener('input', () => { formIsDirty = true; updateSaveButtonState(); });
 
         function escapeHtml(str) {
             return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1393,6 +1446,14 @@
         function ensurePanelSteps() {
             if (!Array.isArray(manualData.steps)) manualData.steps = [];
             const stepById = new Map(manualData.steps.map(s => [s.id, s]));
+            const validStepIds = new Set();
+            // A qué página pertenece cada punto ahora mismo — se usa abajo para
+            // reordenar el guion por página (ver comentario más abajo).
+            const panelToPage = {};
+            manualData.paginas.forEach((pagina, idx) => {
+                pagina.paneles.forEach(p => { panelToPage[p.id] = idx; });
+            });
+
             // De TODAS las páginas, no solo la que esté abierta ahora mismo —
             // igual que buildAutoSteps(): si se crean/editan puntos en varias
             // páginas antes de guardar, todas necesitan su paso, no solo la que
@@ -1400,6 +1461,7 @@
             manualData.paginas.forEach(pagina => {
                 pagina.paneles.forEach(p => {
                     const stepId = `step-${p.id}`;
+                    validStepIds.add(stepId);
                     const text = p.narrativa || p.resumen || p.titulo || p.id;
                     const existing = stepById.get(stepId);
                     if (existing) {
@@ -1410,10 +1472,57 @@
                         // diciendo el texto viejo).
                         existing.text = text;
                     } else {
+                        // Se agrega al final por ahora — el reordenamiento por
+                        // página de abajo lo deja en el bloque correcto antes de
+                        // guardar, sin importar en qué posición haya quedado aquí.
                         manualData.steps.push({ id: stepId, text, panelIds: [p.id] });
                     }
                 });
             });
+            // Quita los pasos de puntos que ya NO existen (se borraron desde el
+            // editor, con deletePanel() o al borrar una imagen/página): deletePanel()
+            // solo quita el punto de "paneles", nunca tocó "steps" directamente, así
+            // que su narración vieja se quedaba guardada para siempre y el
+            // reproductor la seguía diciendo aunque el punto ya no estuviera —
+            // además, un paso así no pertenece a ninguna página (pageIndexForStep en
+            // viewer.html no lo encuentra), lo que forzaba al escenario a aplanarse
+            // a medio ciclo mientras sonaba esa narración fantasma. Solo se filtran
+            // los pasos "step-<id>" (por punto); "intro-1"/"intro-objetivo"/
+            // "pagina-contexto-N" etc. no llevan ese prefijo y no se tocan aquí.
+            manualData.steps = manualData.steps.filter(s => !s.id.startsWith('step-') || validStepIds.has(s.id));
+        }
+
+        // Reordena TODO el guion por página (bienvenida/objetivo primero, luego
+        // cada página en orden). Casos que esto arregla — ambos dejaban un paso
+        // pegado al final de TODO el manual (después de páginas posteriores que
+        // ya tenían guion), con la reproducción "saltando" de vuelta a esa
+        // página antes y, peor, reactivando de golpe TODOS sus puntos ya vistos
+        // (el resaltado acumulado de renderStep en viewer.html no tiene pausa
+        // entre pasos ya pasados):
+        //  1. Un punto nuevo en una página anterior, agregado por ensurePanelSteps()
+        //     (que antes SIEMPRE empujaba al final de TODO el arreglo).
+        //  2. El "contexto" de una página sin puntos TODAVÍA, agregado por
+        //     ensurePaginaContextSteps() (que al no encontrar un primer punto de
+        //     esa página, también caía al final de TODO el arreglo).
+        // Por eso se llama DESPUÉS de ambas, no adentro de ensurePanelSteps() —
+        // para cubrir lo que la segunda todavía pueda dejar mal puesto.
+        // Ordenamiento ESTABLE (desempata por posición original): dentro de cada
+        // página, el orden relativo que ya tenían los pasos no cambia — eso lo
+        // sigue afinando syncStepOrderToPaneles() para la página activa.
+        function sortStepsByPage() {
+            const panelToPage = {};
+            manualData.paginas.forEach((pagina, idx) => {
+                pagina.paneles.forEach(p => { panelToPage[p.id] = idx; });
+            });
+            function stepPageIndex(step) {
+                if (typeof step.pageFlat === 'number') return step.pageFlat;
+                const id = (step.panelIds || [])[0];
+                return (id && Object.prototype.hasOwnProperty.call(panelToPage, id)) ? panelToPage[id] : -1;
+            }
+            manualData.steps = manualData.steps
+                .map((s, i) => ({ s, i, page: stepPageIndex(s) }))
+                .sort((a, b) => (a.page - b.page) || (a.i - b.i))
+                .map(x => x.s);
         }
 
         // Si el manual ya tiene un guion guardado (pasos "step-<id>" por panel),
@@ -1451,8 +1560,6 @@
             editingPanelId = id;
             formIsDirty = false;
 
-            panelIdInput.value = panel.id;
-            panelIdInput.readOnly = true; // no cambiar el id de un punto ya existente (rompería sus referencias)
             document.getElementById('panel-titulo').value = panel.titulo || '';
             document.getElementById('panel-resumen').value = panel.resumen || '';
             panelColorInput.value = panel.color || '#00f0ff';
@@ -1482,10 +1589,8 @@
         function cancelEditPanel() {
             editingPanelId = null;
             formIsDirty = false;
-            panelIdInput.readOnly = false;
             canvasContainer.classList.remove('editing-mode');
 
-            document.getElementById('panel-id').value = '';
             document.getElementById('panel-titulo').value = '';
             document.getElementById('panel-resumen').value = '';
             document.getElementById('panel-voice').value = '';
@@ -1663,10 +1768,6 @@
             updateDurationEstimate();
         }
 
-        // Borra la imagen de la página activa (no la página en sí, ni sus
-        // puntos) — por si ya no la quieres. Igual que reemplazarla, esto no
-        // limpia el archivo viejo en Drive (ese mismo comportamiento ya existía
-        // al reemplazar una imagen), solo quita la referencia de este manual.
         // Borra la página completa (imagen + sus puntos) — no solo la imagen:
         // una página sin imagen se veía fea (espacio vacío), así que en vez de
         // dejarla así se quita entera. Excepción: si es la ÚNICA página del
@@ -1689,6 +1790,7 @@
             if (!confirmed) return;
 
             if (isOnlyPage) {
+                if (pagina.canvas && pagina.canvas.assetId) assetIdsToTrash.push(pagina.canvas.assetId);
                 pagina.canvas = null;
                 pagina.paneles = [];
                 delete pendingImages[activePageIndex];
@@ -1707,6 +1809,8 @@
         // (su "contexto"/pageFlat estaba anclado a su índice viejo).
         function eliminarPaginaCompleta(idx) {
             const pagina = manualData.paginas[idx];
+
+            if (pagina.canvas && pagina.canvas.assetId) assetIdsToTrash.push(pagina.canvas.assetId);
 
             const stepIdsToRemove = new Set(pagina.paneles.map(p => `step-${p.id}`));
             stepIdsToRemove.add(`pagina-contexto-${idx}`);
@@ -1799,9 +1903,10 @@
             hasUnsavedChanges = true;
             if (editingPanelId === id) cancelEditPanel();
 
+            // No hace falta llamar renderPreviewCards() aparte: renderExistingMarkers()
+            // ya lo hace sola si Vista Previa está activa (ver su comentario).
             renderExistingMarkers();
             renderPanelList();
-            if (canvasContainer.classList.contains('preview-mode')) renderPreviewCards();
         }
 
         // Si venimos del dashboard con ?id=..., cargar el manual existente
@@ -1938,9 +2043,22 @@
             updateSaveButtonState();
         });
 
+        // El id es puramente interno (referencias en steps/DOM, nunca se le
+        // muestra al usuario) — se genera solo, sin que nadie tenga que pensar
+        // en un identificador único a mano. Se revisa contra TODAS las páginas
+        // del manual (no solo la activa): los steps son globales, así que un
+        // choque de id entre dos páginas distintas rompería sus referencias.
+        function generatePanelId() {
+            const existingIds = new Set(manualData.paginas.flatMap(pg => pg.paneles.map(p => p.id)));
+            let id;
+            do {
+                id = generateId(); // mismo generador que ya usa currentTrainingId (prefiere crypto.randomUUID)
+            } while (existingIds.has(id));
+            return id;
+        }
+
         // 3. Guardar el Panel en Memoria (crea uno nuevo, o actualiza el que se esté editando)
         async function addPanel() {
-            const pId = document.getElementById('panel-id').value.trim();
             const pTitulo = document.getElementById('panel-titulo').value.trim();
             const pResumen = document.getElementById('panel-resumen').value.trim();
             const pColor = document.getElementById('panel-color').value;
@@ -1948,8 +2066,8 @@
             const cX = coordXInput.value;
             const cY = coordYInput.value;
 
-            if (!pId || !cX || !cY) {
-                await appAlert("Por favor, haz clic en la imagen para obtener coordenadas y dale un ID al panel.");
+            if (!pTitulo || !cX || !cY) {
+                await appAlert("Por favor, haz clic en la imagen (o escribe las coordenadas) y dale un título al punto.");
                 return;
             }
 
@@ -1965,7 +2083,7 @@
                 if (!panel) { cancelEditPanel(); return; }
                 panel.color = pColor;
                 panel.origen = { x: cX, y: cY };
-                panel.titulo = pTitulo || pId;
+                panel.titulo = pTitulo;
                 panel.narrativa = pVoice;
                 if (pResumen) panel.resumen = pResumen;
                 else delete panel.resumen;
@@ -1977,20 +2095,14 @@
                 cancelEditPanel();
                 renderExistingMarkers();
                 renderPanelList();
-                if (canvasContainer.classList.contains('preview-mode')) renderPreviewCards();
-                return;
-            }
-
-            if (currentPagina().paneles.some(p => p.id === pId)) {
-                await appAlert(`Ya existe un punto con el ID "${pId}". Usa otro id, o edítalo desde la lista "3. Puntos Existentes".`);
                 return;
             }
 
             const newPanel = {
-                id: pId,
+                id: generatePanelId(),
                 color: pColor,
                 origen: { x: cX, y: cY },
-                titulo: pTitulo || pId,
+                titulo: pTitulo,
                 narrativa: pVoice
             };
             if (pResumen) newPanel.resumen = pResumen;
@@ -2000,7 +2112,6 @@
             hasUnsavedChanges = true;
 
             // Limpiar formulario para el siguiente
-            document.getElementById('panel-id').value = '';
             document.getElementById('panel-titulo').value = '';
             document.getElementById('panel-resumen').value = '';
             document.getElementById('panel-voice').value = '';
@@ -2051,6 +2162,11 @@
                 if (data.error) throw new Error(data.error);
 
                 if (manualData.paginas[pageIndex]) {
+                    // La imagen vieja de esta página (si tenía una) queda huérfana
+                    // en Drive en cuanto se le reemplaza — se manda a la papelera
+                    // una vez el guardado completo tenga éxito (trashPendingAssets).
+                    const oldCanvas = manualData.paginas[pageIndex].canvas;
+                    if (oldCanvas && oldCanvas.assetId) assetIdsToTrash.push(oldCanvas.assetId);
                     manualData.paginas[pageIndex].canvas = { assetId: data.assetId, url: data.url };
                 }
             }
@@ -2220,6 +2336,7 @@
             } else {
                 ensurePanelSteps();
                 ensurePaginaContextSteps();
+                sortStepsByPage();
                 syncStepOrderToPaneles();
                 ensureObjectiveStep();
                 ensureIntroText();
@@ -2256,9 +2373,30 @@
                 hasSavedOnce = true;
                 hasUnsavedChanges = false;
                 sendStatus.textContent = `Guardado (v${data.version}): ${currentPagina().paneles.length} panel(es).`;
+                // Recién ahora que el guardado tuvo éxito (el manual ya no
+                // referencia las imágenes viejas) es seguro mandarlas a la
+                // papelera de Drive — sin esperar (mejor esfuerzo: si falla, no
+                // debe convertir un guardado exitoso en un error para el usuario).
+                trashPendingAssets();
             } catch (err) {
                 sendStatus.textContent = 'Error al guardar: ' + err.message;
             }
+        }
+
+        // Vacía assetIdsToTrash mandando cada archivo a la papelera de Drive —
+        // así la carpeta del manual no acumula imágenes viejas que ya no
+        // aparecen en ninguna página (reemplazadas, o de una página/imagen
+        // borrada). No se reintenta si un archivo falla: en el peor caso se
+        // queda huérfano en Drive (nunca rompe el manual, que ya no lo referencia).
+        async function trashPendingAssets() {
+            if (!assetIdsToTrash.length) return;
+            const ids = assetIdsToTrash;
+            assetIdsToTrash = [];
+            await Promise.allSettled(ids.map(assetId => fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'trashAsset', id: assetId })
+            })));
         }
 
         async function verEnReproductor() {

@@ -357,6 +357,20 @@
         let voiceEnabled = true;
         let currentUtteranceId = 0;
         let currentWordData = [];
+        // Fragmentos de voz (splitIntoSpeechChunks) del paso que se está narrando
+        // ahora mismo, y en cuál va — persisten fuera de playCurrentStep() para
+        // que silenciar/activar la voz A MEDIO diálogo (ver btnVoice más abajo)
+        // pueda retomar desde el mismo fragmento en vez de reiniciar el paso
+        // completo desde el principio.
+        let currentStepChunks = null;
+        let currentChunkIndex = 0;
+        // A qué "currentStep" pertenecen currentStepChunks — Adelantar/Regresar
+        // manual (showStepPreview) NO pasa por playCurrentStep(), así que
+        // currentStepChunks puede quedar apuntando a un paso VIEJO mientras
+        // currentStep ya cambió. Antes de retomar un fragmento a medias (mute o
+        // resumir tras pausa) hay que confirmar que de verdad son del paso
+        // actual — si no, tocaría retomar el texto equivocado.
+        let currentStepChunksForStep = -1;
 
         // Bug conocido en navegadores Chromium: getVoices() puede regresar vacío
         // justo tras cargar la página porque las voces se cargan asíncronamente.
@@ -552,6 +566,81 @@
             return voices.find(v => v.lang && v.lang.toLowerCase().startsWith('es')) || null;
         }
 
+        // Otro bug conocido de Chrome: si una narración sigue hablando más de
+        // ~15 segundos seguidos, el motor de voz se detiene solo a media frase
+        // (se "come" el resto). pause()+resume() de golpe cada pocos segundos
+        // evita que llegue a ese límite — no se nota ninguna pausa real, es
+        // instantáneo. No hace nada si no hay nada sonando en ese momento.
+        if ('speechSynthesis' in window) {
+            setInterval(() => {
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.pause();
+                    window.speechSynthesis.resume();
+                }
+            }, 10000);
+        }
+
+        // Habla currentStepChunks[currentChunkIndex] y sigue con los que faltan
+        // del paso — separado de playCurrentStep() para que un cambio de volumen
+        // a medio diálogo (ver toggleVoiceMuted) pueda retomar desde el MISMO
+        // fragmento en el que iba, sin reiniciar currentChunkIndex a 0.
+        function speakChunkAt(myUtteranceId) {
+            if (myUtteranceId !== currentUtteranceId || !isPlaying) return;
+            const chunks = currentStepChunks;
+            if (!chunks || currentChunkIndex >= chunks.length) {
+                currentWordData.forEach(wd => {
+                    let el = document.getElementById(wd.id);
+                    if (el) el.classList.add('highlight');
+                });
+                autoPlayTimer = setTimeout(() => {
+                    if (isPlaying) goNextAuto();
+                }, 1000);
+                return;
+            }
+
+            // La voz lee el fragmento COMPLETO de corrido (sin pausas
+            // artificiales); el subtítulo va pasando de página sin que
+            // eso afecte el audio (ver onboundary).
+            const chunk = chunks[currentChunkIndex];
+            const pages = groupIntoPages(buildWordList(chunk));
+            let pageIndex = 0;
+            renderWordPage(pages[0]);
+
+            const utterance = new SpeechSynthesisUtterance(chunk);
+            utterance.lang = 'es-MX';
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            // Silenciado: sigue "hablando" (mismo timing real de
+            // onboundary, mismo resaltado de subtítulos) pero sin sonido.
+            utterance.volume = voiceEnabled ? 1 : 0;
+            const spanishVoice = pickSpanishVoice();
+            if (spanishVoice) utterance.voice = spanishVoice;
+
+            utterance.onboundary = (event) => {
+                if (event.name === 'word' && isPlaying && myUtteranceId === currentUtteranceId) {
+                    const cIndex = event.charIndex;
+                    while (pages[pageIndex + 1] && pages[pageIndex + 1].length && cIndex >= pages[pageIndex + 1][0].start) {
+                        pageIndex++;
+                        renderWordPage(pages[pageIndex]);
+                    }
+                    currentWordData.forEach(wd => {
+                        if (cIndex >= wd.start - 1) {
+                            let el = document.getElementById(wd.id);
+                            if (el) el.classList.add('highlight');
+                        }
+                    });
+                }
+            };
+
+            utterance.onend = () => {
+                if (myUtteranceId !== currentUtteranceId || !isPlaying) return;
+                currentChunkIndex++;
+                speakChunkAt(myUtteranceId);
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
         function playCurrentStep() {
             if (currentStep < 0 || currentStep >= steps.length) return;
 
@@ -562,66 +651,30 @@
             clearTimeout(autoPlayTimer);
             if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
-            if (voiceEnabled && 'speechSynthesis' in window && text) {
-                const chunks = splitIntoSpeechChunks(text);
-                let chunkIndex = 0;
+            // Se usa el motor de voz SIEMPRE que el navegador lo soporte y haya
+            // texto — con voiceEnabled=false igual, pero mudo (utterance.volume=0
+            // más abajo). Así el resaltado de subtítulos palabra por palabra
+            // (onboundary) sigue el mismo ritmo real que tendría hablado, en vez
+            // de una aproximación por tiempo — silenciar debe cambiar solo el
+            // audio, no el "como si estuviera hablando" del texto.
+            if ('speechSynthesis' in window && text) {
+                currentStepChunks = splitIntoSpeechChunks(text);
+                currentChunkIndex = 0;
+                currentStepChunksForStep = currentStep;
 
-                const finishStep = () => {
-                    currentWordData.forEach(wd => {
-                        let el = document.getElementById(wd.id);
-                        if (el) el.classList.add('highlight');
-                    });
-                    autoPlayTimer = setTimeout(() => {
-                        if (isPlaying) goNextAuto();
-                    }, 1000);
-                };
-
-                const speakNextChunk = () => {
-                    if (myUtteranceId !== currentUtteranceId || !isPlaying) return;
-                    if (chunkIndex >= chunks.length) { finishStep(); return; }
-
-                    // La voz lee el fragmento COMPLETO de corrido (sin pausas
-                    // artificiales); el subtítulo va pasando de página sin que
-                    // eso afecte el audio (ver onboundary).
-                    const chunk = chunks[chunkIndex];
-                    const pages = groupIntoPages(buildWordList(chunk));
-                    let pageIndex = 0;
-                    renderWordPage(pages[0]);
-
-                    const utterance = new SpeechSynthesisUtterance(chunk);
-                    utterance.lang = 'es-MX';
-                    utterance.rate = 1.0;
-                    utterance.pitch = 1.0;
-                    const spanishVoice = pickSpanishVoice();
-                    if (spanishVoice) utterance.voice = spanishVoice;
-
-                    utterance.onboundary = (event) => {
-                        if (event.name === 'word' && isPlaying && myUtteranceId === currentUtteranceId) {
-                            const cIndex = event.charIndex;
-                            while (pages[pageIndex + 1] && pages[pageIndex + 1].length && cIndex >= pages[pageIndex + 1][0].start) {
-                                pageIndex++;
-                                renderWordPage(pages[pageIndex]);
-                            }
-                            currentWordData.forEach(wd => {
-                                if (cIndex >= wd.start - 1) {
-                                    let el = document.getElementById(wd.id);
-                                    if (el) el.classList.add('highlight');
-                                }
-                            });
-                        }
-                    };
-
-                    utterance.onend = () => {
-                        if (myUtteranceId !== currentUtteranceId || !isPlaying) return;
-                        chunkIndex++;
-                        speakNextChunk();
-                    };
-
-                    window.speechSynthesis.speak(utterance);
-                };
-
-                speakNextChunk();
+                // Chrome a veces "traga" el inicio de la narración si speak() se
+                // llama en el mismo instante que cancel() (el motor de voz
+                // todavía no soltó del todo la utterance anterior) — el fragmento
+                // arranca a medias o se pierde en silencio, y como los fragmentos
+                // siguientes SÍ suenan bien, se oía como si solo dijera el final
+                // del texto. Un respiro corto entre cancel() y el primer speak()
+                // le da tiempo al motor a quedar listo de verdad. myUtteranceId ya
+                // protege este delay: si para cuando corre ya se pasó de paso, no
+                // hace nada.
+                setTimeout(() => speakChunkAt(myUtteranceId), 120);
             } else {
+                currentStepChunks = null;
+                currentStepChunksForStep = -1;
                 if (voiceEnabled && !('speechSynthesis' in window) && !voiceWarningShown) {
                     voiceWarningShown = true;
                     console.warn('[voz] Este navegador/dispositivo no soporta síntesis de voz (window.speechSynthesis no existe). La capacitación seguirá avanzando por tiempo, pero sin narración.');
@@ -655,6 +708,26 @@
 
                 showNextPage();
             }
+        }
+
+        // Retoma la narración desde donde iba (currentChunkIndex de
+        // currentStepChunks) en vez de reiniciar el paso completo desde cero —
+        // usado tanto al cambiar mute/unmute a medio diálogo como al reanudar
+        // con Play después de una pausa real. Si currentStepChunks no
+        // corresponde al paso actual (por ejemplo, se navegó manualmente con
+        // Adelantar/Regresar mientras estaba pausado, lo que no pasa por
+        // playCurrentStep) cae de vuelta a playCurrentStep(), que arma todo de
+        // nuevo para el paso correcto.
+        function resumeSpeechFromCurrentChunk() {
+            if (!('speechSynthesis' in window) || !currentStepChunks || currentStepChunksForStep !== currentStep) {
+                playCurrentStep();
+                return;
+            }
+            window.speechSynthesis.cancel();
+            clearTimeout(autoPlayTimer);
+            currentUtteranceId++;
+            const myUtteranceId = currentUtteranceId;
+            setTimeout(() => speakChunkAt(myUtteranceId), 120);
         }
 
         // Cuánto se ve el documento plano (sin tarjetas) antes de inclinarse —
@@ -699,12 +772,28 @@
                 return;
             }
 
-            // Sin transición pendiente: avance normal de un paso.
+            // Sin transición pendiente: avance normal de un paso. Esto corre
+            // IGUAL en automático (Play) que manual (un clic más de Adelantar
+            // ya en el último paso) — antes solo pasaba algo aquí si isAuto,
+            // así que Adelantar manualmente hasta el final se quedaba tal cual
+            // (inclinado, con todas las tarjetas encimadas) sin ningún aviso.
             if (currentStep >= steps.length - 1) {
-                if (isAuto) {
-                    pause();
-                    subtitleBox.innerHTML = '<span class="k-word highlight">Módulo</span> <span class="k-word highlight">1</span> <span class="k-word highlight">Completado.</span> <span class="k-word highlight">(Usa</span> <span class="k-word highlight">Regresar</span> <span class="k-word highlight">o</span> <span class="k-word highlight">Reiniciar)</span>';
+                pause();
+                // No dejar la última página inclinada con todas sus tarjetas
+                // encimadas al terminar — se ve tronado. Las páginas de en
+                // medio ya vuelven solas a plano al cruzar a la siguiente (ver
+                // más arriba); la ÚLTIMA nunca tiene un "siguiente" que
+                // dispare esa misma limpieza, así que se hace aquí. Este punto
+                // solo se alcanza cuando ya no queda NINGÚN paso más de
+                // NINGUNA página, así que la que se esté mostrando aquí es
+                // siempre la última del manual (aplica igual si el manual
+                // completo es de una sola página).
+                if (dynTiltActive) {
+                    scene.classList.remove('is-3d');
+                    dynTiltActive = false;
+                    Object.values(panelEls).forEach(p => p.deactivate());
                 }
+                subtitleBox.innerHTML = '<span class="k-word highlight">Módulo</span> <span class="k-word highlight">1</span> <span class="k-word highlight">Completado.</span> <span class="k-word highlight">(Usa</span> <span class="k-word highlight">Regresar</span> <span class="k-word highlight">o</span> <span class="k-word highlight">Reiniciar)</span>';
                 return;
             }
 
@@ -793,8 +882,32 @@
         btnVoice.addEventListener('click', () => {
             voiceEnabled = !voiceEnabled;
             btnVoiceIcon.src = voiceEnabled ? '../images/icon-sound-on-cy.png' : '../images/icon-sound-off-cy.png';
-            if (!voiceEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
-            else if (isPlaying && currentStep >= 0) playCurrentStep();
+            if (!('speechSynthesis' in window)) return;
+
+            if (!isPlaying || currentStep < 0 || dynPendingPhase) {
+                // dynPendingPhase: a medio ciclo de 3 posiciones (imagen plana o
+                // ya inclinada, pero SIN narración activa todavía) no hay nada
+                // que retomar. Si se llamara resumeSpeechFromCurrentChunk aquí,
+                // su temporizador de 1000ms (el de "ya terminé de hablar, paso
+                // al siguiente") reemplazaría al de TILT_MS/PAGE_TRANSITION_PAUSE_MS
+                // que stepForward ya dejó armado — calibrado para durar lo mismo
+                // que la animación CSS de inclinación — adelantando el punto
+                // antes de que la imagen termine de inclinarse en pantalla. El
+                // siguiente avance ya toma el voiceEnabled actualizado por su
+                // cuenta, así que aquí solo hace falta cancelar cualquier resto
+                // de audio (normalmente no hay ninguno en este momento).
+                window.speechSynthesis.cancel();
+                return;
+            }
+
+            // El motor de voz no deja cambiar el volumen de un audio que ya está
+            // sonando (hay que cancelar y volver a mandar speak()), así que
+            // cambiar mute/unmute A MEDIO diálogo siempre "salta" al inicio de
+            // ALGO — antes ese algo era el paso completo (playCurrentStep lo
+            // reinicia todo desde cero), lo que se sentía como que reiniciaba la
+            // narración entera. resumeSpeechFromCurrentChunk() retoma desde el
+            // fragmento en el que iba en vez de todo el diálogo.
+            resumeSpeechFromCurrentChunk();
         });
 
         function play() {
@@ -811,8 +924,12 @@
 
             // Si se pausó a medio ciclo de 3 posiciones (plana o ya inclinada
             // pero sin el punto todavía), seguir desde ahí — no renarrar el
-            // punto anterior de la nada.
-            if (dynPendingPhase) stepForward(true); else playCurrentStep();
+            // punto anterior de la nada. Si no, se reanuda el mismo diálogo
+            // donde iba (resumeSpeechFromCurrentChunk) en vez de reiniciarlo
+            // desde el principio — antes, Pausa -> Play SIEMPRE volvía al
+            // inicio del paso, lo que también se sentía como el mismo bug al
+            // combinarlo con mute/unmute a medio diálogo.
+            if (dynPendingPhase) stepForward(true); else resumeSpeechFromCurrentChunk();
         }
 
         function pause() {

@@ -5,3 +5,15 @@
 
 [functions]
   node_bundler = "esbuild"
+
+# Sin esto, el navegador puede quedarse con una copia vieja en caché de
+# editor.html/viewer.html/dashboard.html y no darse cuenta de que hay una
+# versión nueva — pasó varias veces durante el desarrollo (un cambio recién
+# guardado no se reflejaba aunque el archivo en disco ya estuviera correcto,
+# hacía falta un refresh forzado para notarlo). Estos archivos son chicos y
+# cambian seguido, así que no vale la pena cachearlos — mejor pedirle siempre
+# al servidor la versión más reciente.
+[[headers]]
+  for = "/HTMLS/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"

@@ -103,7 +103,11 @@
         #skip-intro {
             position: absolute;
             right: 24px;
-            bottom: 24px;
+            /* Temporal: 24px (su lugar de siempre) queda tapado por la insignia
+               de Netlify Dev que aparece abajo a la derecha en local — subirlo
+               mientras tanto. Volver a 24px cuando ya no estorbe (pidió el
+               usuario recordar bajarlo de vuelta). */
+            bottom: 90px;
             background: rgba(0, 240, 255, 0.9);
             color: #000;
             border: 0;
@@ -250,24 +254,37 @@
             skipTimer = setTimeout(() => { skipIntro.classList.add('skip-hidden'); }, 3000);
         }
 
-        // DESACTIVADO TEMPORALMENTE a pedido (para no tener que verla/saltarla en
-        // cada prueba durante este período de pruebas seguidas). Para reactivarla:
-        // descomenta este bloque y borra el "closeIntro();" de la línea de abajo.
-        // introVideo.addEventListener('ended', closeIntro);
-        // introVideo.addEventListener('error', closeIntro);
-        // introVideo.addEventListener('playing', startSkipTimer, { once: true });
-        // introVideo.play().catch(() => {
-        //     startIntro.hidden = false;
-        // });
-        // startIntro.addEventListener('click', function() {
-        //     startIntro.hidden = true;
-        //     introVideo.play();
-        // });
-        // skipIntro.addEventListener('click', function() {
-        //     clearTimeout(skipTimer);
-        //     closeIntro();
-        // });
-        closeIntro();
+        // Se muestra una sola vez por navegador (localStorage, no por sesión):
+        // una vez que ya se vio completa o se saltó, dashboard.html nunca la
+        // vuelve a mostrar sola, aunque se navegue de vuelta desde el editor o
+        // el reproductor. Si localStorage falla (modo privado, etc.) simplemente
+        // se vuelve a mostrar la próxima vez — no rompe nada.
+        const INTRO_PLAYED_KEY = 'energki_intro_played';
+        function markIntroPlayed() {
+            try { localStorage.setItem(INTRO_PLAYED_KEY, '1'); } catch (e) { /* modo privado, etc. */ }
+        }
+        let introAlreadyPlayed = false;
+        try { introAlreadyPlayed = localStorage.getItem(INTRO_PLAYED_KEY) === '1'; } catch (e) { /* idem */ }
+
+        if (introAlreadyPlayed) {
+            closeIntro();
+        } else {
+            introVideo.addEventListener('ended', () => { markIntroPlayed(); closeIntro(); });
+            introVideo.addEventListener('error', () => { markIntroPlayed(); closeIntro(); });
+            introVideo.addEventListener('playing', startSkipTimer, { once: true });
+            introVideo.play().catch(() => {
+                startIntro.hidden = false;
+            });
+            startIntro.addEventListener('click', function() {
+                startIntro.hidden = true;
+                introVideo.play();
+            });
+            skipIntro.addEventListener('click', function() {
+                clearTimeout(skipTimer);
+                markIntroPlayed();
+                closeIntro();
+            });
+        }
 
         const loadingState = document.getElementById('loading-state');
         const errorState = document.getElementById('error-state');

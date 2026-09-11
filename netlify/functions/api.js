@@ -315,6 +315,23 @@ async function getAsset(fileId) {
   };
 }
 
+// Manda un archivo a la papelera de Drive (no lo borra en definitiva, igual
+// que deleteTraining con la carpeta de un manual) — se usa cuando el editor
+// reemplaza o quita la imagen de una página, para que esa imagen vieja no se
+// quede huérfana en la carpeta del manual para siempre. No falla si el
+// archivo ya no existe o ya estaba en la papelera: es una limpieza de mejor
+// esfuerzo, nunca debe tumbar el guardado que la dispara.
+async function trashAsset(fileId) {
+  if (!fileId) return { error: 'Falta el id del archivo' };
+  try {
+    const drive = await getDriveClient();
+    await drive.files.update({ fileId, requestBody: { trashed: true }, supportsAllDrives: true });
+    return { id: fileId, trashed: true };
+  } catch (err) {
+    return { id: fileId, trashed: false, error: err.message };
+  }
+}
+
 // ---- Handler HTTP ----
 
 exports.handler = async (event) => {
@@ -334,6 +351,7 @@ exports.handler = async (event) => {
       if (body.action === 'saveTraining') return respond(await saveTraining(body));
       if (body.action === 'uploadAsset') return respond(await uploadAsset(body));
       if (body.action === 'deleteTraining') return respond(await deleteTraining(body.id));
+      if (body.action === 'trashAsset') return respond(await trashAsset(body.id));
       return respond({ error: 'Acción no reconocida: ' + body.action });
     }
 
